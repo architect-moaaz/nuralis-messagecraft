@@ -1,0 +1,31 @@
+graph TD
+    Start([🚀 Start]) --> BD[🔍 Business Discovery<br/>Extract requirements & audience]
+    BD --> CR[🕵️ Competitor Research<br/>Analyze competitive landscape]
+    CR --> PA[🎯 Positioning Analysis<br/>Develop strategic positioning]
+    PA --> TB[🔒 Trust Building<br/>Industry-specific trust factors]
+    TB --> EI[❤️ Emotional Intelligence<br/>Analyze emotional triggers]
+    EI --> SPG[🏆 Social Proof Generator<br/>Create social proof elements]
+    SPG --> MG[✍️ Messaging Generator<br/>Generate core messaging]
+    MG --> CC[📝 Content Creator<br/>Create marketing content]
+    CC --> QR[🔍 Quality Reviewer<br/>10-dimension quality scoring]
+    
+    QR --> RO{🤔 Reflection Orchestrator<br/>Quality ≥ 9.5?<br/>Cycles < Max?}
+    
+    RO -->|Quality < 9.5<br/>& Cycles < Max| CA[🎯 Critique Agent<br/>Detailed analysis & feedback]
+    CA --> RA[🔧 Refinement Agent<br/>Apply improvements]
+    RA --> MR[🔍 Meta Reviewer<br/>Review reflection process]
+    MR --> RO
+    
+    RO -->|Quality ≥ 9.5<br/>OR Cycles ≥ Max| FA[📋 Final Assembly<br/>Compile messaging playbook]
+    FA --> End([✅ Complete])
+    
+    %% Styling
+    classDef startEnd fill:#e1f5fe,stroke:#01579b,stroke-width:3px,color:#000
+    classDef coreAgent fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#000
+    classDef reflectionAgent fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#000
+    classDef decision fill:#e8f5e8,stroke:#1b5e20,stroke-width:3px,color:#000
+    
+    class Start,End startEnd
+    class BD,CR,PA,TB,EI,SPG,MG,CC,QR,FA coreAgent
+    class CA,RA,MR reflectionAgent
+    class RO decision
