@@ -1,0 +1,46 @@
+# MessageCraft Essential Dependencies
+# Core FastAPI and async support
+fastapi==0.109.0
+uvicorn[standard]==0.25.0
+pydantic==2.5.2
+python-multipart==0.0.6
+
+# Database
+asyncpg==0.29.0
+supabase==2.10.1
+
+# AI and LangGraph
+anthropic==0.57.1
+langgraph==0.3.24
+langchain==0.3.22
+langchain-anthropic==0.3.17
+langchain-core==0.3.68
+langchain-community==0.0.38
+
+# HTTP and API
+aiohttp==3.9.1
+httpx==0.26.0
+requests==2.31.0
+
+# Utilities
+python-dotenv==1.0.0
+Pillow==10.1.0
+jinja2==3.1.2
+
+# Password hashing
+bcrypt==4.3.0
+passlib[bcrypt]==1.7.4
+
+# Payment processing (optional)
+stripe==7.8.0
+
+# PDF generation (optional)
+reportlab==4.0.7
+weasyprint==60.2
+
+# Logging and monitoring
+python-json-logger==2.0.7
+
+# Testing (development only)
+# pytest==7.4.3
+# pytest-asyncio==0.21.1

@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy and install backend dependencies
-COPY backend/requirements.txt ./backend/
-RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY backend/requirements-clean.txt ./backend/
+RUN pip install --no-cache-dir -r backend/requirements-clean.txt
 
 # Copy backend code
 COPY backend/ ./backend/

@@ -1,0 +1,26 @@
+# Minimal MessageCraft Dockerfile for quick testing
+FROM python:3.12-slim
+
+# Install only essential system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy and install minimal backend dependencies
+COPY backend/requirements-clean.txt ./
+RUN pip install --no-cache-dir -r requirements-clean.txt
+
+# Copy backend code
+COPY backend/ ./backend/
+
+# Simple startup that only runs the backend
+RUN echo '#!/bin/bash\necho "🚀 Starting MessageCraft Backend Only..."\ncd /app/backend && python -m uvicorn enhanced_api:app --host 0.0.0.0 --port 8000' > /app/start.sh && chmod +x /app/start.sh
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["/app/start.sh"]
