@@ -23,6 +23,11 @@ help:
 
 # Development commands
 build:
+	@echo "🔧 Building MessageCraft Docker image..."
+	docker build -f Dockerfile.simple -t messagecraft:latest .
+	@echo "✅ Build complete!"
+
+build-compose:
 	docker-compose build --no-cache
 
 up:

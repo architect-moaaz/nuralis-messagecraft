@@ -12,14 +12,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
-WORKDIR /app/backend
+WORKDIR /app
 
 # Copy backend requirements and install
-COPY backend/requirements.txt .
+COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
-COPY backend/ .
+COPY backend/ ./backend/
 
 # Frontend builder stage
 FROM node:18-alpine AS frontend-builder
@@ -65,7 +65,7 @@ COPY --from=backend-builder /usr/local/bin /usr/local/bin
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
 # Copy nginx configuration
-COPY docker/nginx.conf /etc/nginx/sites-available/default
+COPY frontend/nginx.conf /etc/nginx/sites-available/default
 
 # Copy supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -78,17 +78,19 @@ RUN chmod +x /app/startup.sh
 RUN mkdir -p /var/log/supervisor /var/log/nginx /app/logs
 
 # Set permissions
-RUN chown -R app:app /app /var/log/supervisor /var/log/nginx
+RUN chown -R app:app /app && \
+    chmod +x /app/startup.sh
+
+# Create supervisor and nginx directories
+RUN mkdir -p /var/run/supervisor && \
+    chown -R app:app /var/log/supervisor
 
 # Expose ports
 EXPOSE 80 8000
-
-# Switch to non-root user
-USER app
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/health && curl -f http://localhost:8000/health || exit 1
 
-# Start services using supervisor
+# Start services using supervisor (runs as root for nginx)
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

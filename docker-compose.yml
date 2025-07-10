@@ -5,7 +5,7 @@ services:
   messagecraft:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.simple
     container_name: messagecraft-app
     ports:
       - "80:80"        # Frontend (Nginx)
