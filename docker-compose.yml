@@ -1,55 +1,92 @@
 version: '3.8'
 
 services:
-  backend:
-    build: .
+  # Single container running both frontend and backend
+  messagecraft:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: messagecraft-app
     ports:
-      - "8000:8000"
+      - "80:80"        # Frontend (Nginx)
+      - "8000:8000"    # Backend API (FastAPI)
     environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      # Supabase Configuration
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
-    depends_on:
-      - redis
-      - postgres
-    volumes:
-      - ./backend:/app
-  
-  frontend:
-    image: node:18-alpine
-    working_dir: /app
-    ports:
-      - "3000:3000"
-    environment:
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      
+      # Database
+      - DATABASE_URL=${DATABASE_URL}
+      
+      # AI Configuration
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      
+      # App Configuration
+      - ENVIRONMENT=production
+      
+      # Frontend API URL (internal)
       - VITE_API_URL=http://localhost:8000
-      - VITE_STRIPE_PUBLIC_KEY=${VITE_STRIPE_PUBLIC_KEY}
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: sh -c "npm install && npm run start"
-    depends_on:
-      - backend
-  
-  redis:
-    image: redis:alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-  
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: messagecraft
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - messagecraft-network
 
-volumes:
-  postgres_data:
-  redis_data:
+  # Alternative: Separate containers for each service
+  # Uncomment below for production-style deployment
+
+  # backend:
+  #   build:
+  #     context: .
+  #     dockerfile: backend/Dockerfile
+  #   container_name: messagecraft-backend
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - SUPABASE_URL=${SUPABASE_URL}
+  #     - SUPABASE_KEY=${SUPABASE_KEY}
+  #     - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+  #     - DATABASE_URL=${DATABASE_URL}
+  #     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+  #     - ENVIRONMENT=production
+  #   volumes:
+  #     - ./backend/logs:/app/logs
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - messagecraft-network
+
+  # frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: frontend/Dockerfile
+  #   container_name: messagecraft-frontend
+  #   ports:
+  #     - "80:80"
+  #   environment:
+  #     - VITE_API_URL=http://backend:8000
+  #   depends_on:
+  #     - backend
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+  #   networks:
+  #     - messagecraft-network
+
+networks:
+  messagecraft-network:
+    driver: bridge
