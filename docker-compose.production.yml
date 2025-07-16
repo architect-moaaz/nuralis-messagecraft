@@ -1,0 +1,132 @@
+version: '3.8'
+
+services:
+  # Production Backend with Credits System
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.production
+    container_name: messagecraft-backend-prod
+    ports:
+      - "8000:8000"
+    environment:
+      # Application Mode
+      - ENVIRONMENT=production
+      
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      
+      # Database Configuration
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      
+      # AI Configuration
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      
+      # Google OAuth
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      
+      # Stripe Configuration
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_PRICE_BASIC=${STRIPE_PRICE_BASIC}
+      - STRIPE_PRICE_PROFESSIONAL=${STRIPE_PRICE_PROFESSIONAL}
+      - STRIPE_PRICE_AGENCY=${STRIPE_PRICE_AGENCY}
+      - STRIPE_PRICE_CREDITS_10=${STRIPE_PRICE_CREDITS_10}
+      - STRIPE_PRICE_CREDITS_50=${STRIPE_PRICE_CREDITS_50}
+      - STRIPE_PRICE_CREDITS_100=${STRIPE_PRICE_CREDITS_100}
+      
+      # Frontend Configuration
+      - FRONTEND_URL=${FRONTEND_URL}
+      - SUCCESS_URL=${SUCCESS_URL}
+      - CANCEL_URL=${CANCEL_URL}
+      
+      # Performance
+      - QUALITY_THRESHOLD=9.0
+      - MAX_REFLECTION_CYCLES=2
+      - LOG_LEVEL=INFO
+      
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - messagecraft-network
+    depends_on:
+      - redis
+
+  # Production Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.production
+    container_name: messagecraft-frontend-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - VITE_API_URL=${FRONTEND_URL}/api
+      - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - VITE_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
+      - VITE_ENVIRONMENT=production
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - messagecraft-network
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: messagecraft-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - messagecraft-network
+
+  # Nginx Reverse Proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: messagecraft-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - messagecraft-network
+
+volumes:
+  redis_data:
+
+networks:
+  messagecraft-network:
+    driver: bridge
