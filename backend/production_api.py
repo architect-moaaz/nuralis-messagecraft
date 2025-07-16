@@ -271,17 +271,17 @@ async def handle_google_callback(code: str):
             plan_type=user["plan_type"]
         )
         
-        # For web OAuth flow, redirect to frontend with token
+        # For web OAuth flow, redirect to frontend with token (using hash router)
         frontend_url = settings.FRONTEND_URL
-        redirect_url = f"{frontend_url}/auth/callback?token={token}"
+        redirect_url = f"{frontend_url}/#/auth/callback?token={token}"
         
         return RedirectResponse(url=redirect_url, status_code=302)
         
     except Exception as e:
         logger.error(f"Google auth error: {str(e)}")
-        # Redirect to frontend with error
+        # Redirect to frontend with error (using hash router)
         frontend_url = settings.FRONTEND_URL
-        error_url = f"{frontend_url}/auth/error?error=oauth_failed"
+        error_url = f"{frontend_url}/#/auth/error?error=oauth_failed"
         return RedirectResponse(url=error_url, status_code=302)
 
 @app.get("/api/v1/auth/me")
