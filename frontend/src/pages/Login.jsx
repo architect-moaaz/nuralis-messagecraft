@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import api from '../utils/api';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -30,6 +31,18 @@ const Login = () => {
         type: 'manual',
         message: result.error || 'Invalid credentials',
       });
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const response = await api.get('/api/v1/auth/google');
+      if (response.data.auth_url) {
+        window.location.href = response.data.auth_url;
+      }
+    } catch (error) {
+      console.error('Google OAuth error:', error);
+      alert('OAuth not configured. Please contact support.');
     }
   };
 
@@ -173,7 +186,7 @@ const Login = () => {
               <button
                 type="button"
                 className="w-full btn-secondary"
-                onClick={() => alert('Demo mode - OAuth not configured')}
+                onClick={handleGoogleLogin}
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
