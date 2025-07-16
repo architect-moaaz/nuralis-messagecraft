@@ -210,12 +210,31 @@ async def google_auth(response: Response):
     auth_url = auth_manager.get_google_auth_url()
     return {"auth_url": auth_url}
 
+@app.get("/api/v1/auth/google/callback")
+async def google_auth_callback_get(request: Request, response: Response):
+    """Handle Google OAuth callback (GET request)"""
+    # Add CORS headers
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
+    # Get code from query parameters
+    code = request.query_params.get("code")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
+    
+    return await handle_google_callback(code)
+
 @app.post("/api/v1/auth/google/callback")
-async def google_auth_callback(request: GoogleAuthCallbackRequest):
-    """Handle Google OAuth callback"""
+async def google_auth_callback_post(request: GoogleAuthCallbackRequest):
+    """Handle Google OAuth callback (POST request)"""
+    return await handle_google_callback(request.code)
+
+async def handle_google_callback(code: str):
+    """Common handler for Google OAuth callback"""
     try:
         # Exchange code for tokens
-        tokens = await auth_manager.exchange_google_code(request.code)
+        tokens = await auth_manager.exchange_google_code(code)
         
         # Get user info from Google
         user_info = await auth_manager.get_google_user_info(tokens["access_token"])
@@ -252,25 +271,18 @@ async def google_auth_callback(request: GoogleAuthCallbackRequest):
             plan_type=user["plan_type"]
         )
         
-        # Get credit balance
-        balance = await db_manager.get_user_credit_balance(user["id"])
+        # For web OAuth flow, redirect to frontend with token
+        frontend_url = settings.FRONTEND_URL
+        redirect_url = f"{frontend_url}/auth/callback?token={token}"
         
-        return {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": {
-                "id": user["id"],
-                "email": user["email"],
-                "name": user["name"],
-                "plan_type": user["plan_type"],
-                "credits": balance["credits"],
-                "free_kits_available": balance["free_kits_available"],
-                "total_kits_generated": balance["total_kits_generated"]
-            }
-        }
+        return RedirectResponse(url=redirect_url, status_code=302)
+        
     except Exception as e:
         logger.error(f"Google auth error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Google authentication failed")
+        # Redirect to frontend with error
+        frontend_url = settings.FRONTEND_URL
+        error_url = f"{frontend_url}/auth/error?error=oauth_failed"
+        return RedirectResponse(url=error_url, status_code=302)
 
 @app.get("/api/v1/auth/me")
 async def get_current_user_info(current_user: Dict = Depends(get_current_user)):

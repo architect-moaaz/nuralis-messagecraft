@@ -10,6 +10,8 @@ import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Playbook from './pages/EnhancedPlaybook';
+import AuthCallback from './pages/AuthCallback';
+import AuthError from './pages/AuthError';
 import PrivateRoute from './components/PrivateRoute';
 
 const queryClient = new QueryClient({
@@ -32,6 +34,8 @@ function App() {
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
+              <Route path="/auth/error" element={<AuthError />} />
               <Route
                 path="/dashboard"
                 element={
