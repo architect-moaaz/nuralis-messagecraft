@@ -19,6 +19,7 @@ from pdf_generator import PlaybookGenerator
 # Load environment variables
 load_dotenv()
 
+
 app = FastAPI(
     title="Messaging & Differentiation SaaS",
     description="AI-powered messaging and differentiation platform",
@@ -330,4 +331,5 @@ async def get_current_user_info(user: UserSession = Depends(get_current_user)):
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.environ.get("PORT", 80))
     uvicorn.run(app, host="0.0.0.0")
