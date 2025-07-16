@@ -242,6 +242,10 @@ async def delete_playbook(playbook_id: str, user: UserSession = Depends(get_curr
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/")
+async def root():
+    return {"message": "MessageCraft API", "status": "running", "service": "messaging-saas"}
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "messaging-saas"}
