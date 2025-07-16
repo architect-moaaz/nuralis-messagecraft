@@ -331,5 +331,5 @@ async def get_current_user_info(user: UserSession = Depends(get_current_user)):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 80))
-    uvicorn.run(app, host="0.0.0.0")
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
