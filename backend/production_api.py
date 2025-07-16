@@ -74,7 +74,19 @@ class GoogleAuthCallbackRequest(BaseModel):
     state: Optional[str] = None
 
 # Health check
+@app.get("/")
+@app.head("/")
+async def root():
+    """Root endpoint for health checks"""
+    return {
+        "message": "MessageCraft Production API",
+        "status": "running",
+        "environment": settings.ENVIRONMENT,
+        "timestamp": datetime.now().isoformat()
+    }
+
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     """Health check endpoint"""
     return {
@@ -449,4 +461,5 @@ async def process_messaging_playbook(
 # Run the application
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
