@@ -44,13 +44,29 @@ const Register = () => {
 
   const handleGoogleLogin = async () => {
     try {
+      console.log('Attempting Google OAuth...');
+      console.log('API Base URL:', import.meta.env.VITE_API_URL || 'http://localhost:8000');
+      
       const response = await api.get('/api/v1/auth/google');
+      console.log('Google OAuth response:', response.data);
+      
       if (response.data.auth_url) {
+        console.log('Redirecting to:', response.data.auth_url);
         window.location.href = response.data.auth_url;
+      } else {
+        console.error('No auth_url in response:', response.data);
+        alert('OAuth response missing auth_url');
       }
     } catch (error) {
-      console.error('Google OAuth error:', error);
-      alert('OAuth not configured. Please contact support.');
+      console.error('Google OAuth error details:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      if (error.response?.status === 404) {
+        alert('OAuth endpoint not found. Are you using production_api.py?');
+      } else {
+        alert('OAuth not configured. Please contact support.');
+      }
     }
   };
 
