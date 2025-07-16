@@ -37,7 +37,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if not settings.IS_PRODUCTION else settings.CORS_ORIGINS,
+    allow_origins=["*"],  # Temporarily allow all origins for testing
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,6 +94,17 @@ async def health_check():
         "environment": settings.ENVIRONMENT,
         "is_production": settings.IS_PRODUCTION,
         "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/debug/cors")
+async def debug_cors():
+    """Debug CORS configuration"""
+    return {
+        "environment": settings.ENVIRONMENT,
+        "is_production": settings.IS_PRODUCTION,
+        "frontend_url": settings.FRONTEND_URL,
+        "cors_origins": settings.CORS_ORIGINS,
+        "google_client_id": settings.GOOGLE_CLIENT_ID[:10] + "..." if settings.GOOGLE_CLIENT_ID else "Not set"
     }
 
 # Authentication Endpoints
@@ -189,8 +200,13 @@ async def login(request: LoginRequest):
         raise HTTPException(status_code=500, detail="Login failed")
 
 @app.get("/api/v1/auth/google")
-async def google_auth():
+async def google_auth(response: Response):
     """Initiate Google OAuth flow"""
+    # Add CORS headers manually
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    
     auth_url = auth_manager.get_google_auth_url()
     return {"auth_url": auth_url}
 
