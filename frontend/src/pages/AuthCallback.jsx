@@ -1,12 +1,11 @@
 import React, { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from '../components/LoadingSpinner';
+import api from '../utils/api';
 
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { setAuthToken } = useAuth();
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -16,10 +15,8 @@ const AuthCallback = () => {
       // Store the token
       localStorage.setItem('token', token);
       
-      // Set auth state
-      if (setAuthToken) {
-        setAuthToken(token);
-      }
+      // Set the authorization header
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
       // Redirect to dashboard
       navigate('/dashboard');
@@ -31,7 +28,7 @@ const AuthCallback = () => {
       // No token or error, redirect to login
       navigate('/login');
     }
-  }, [searchParams, navigate, setAuthToken]);
+  }, [searchParams, navigate]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

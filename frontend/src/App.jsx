@@ -52,6 +52,13 @@ function App() {
                   </PrivateRoute>
                 }
               />
+              {/* Catch-all route for 404s */}
+              <Route path="*" element={<div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-gray-900 mb-4">Page Not Found</h1>
+                  <p className="text-gray-600">The page you're looking for doesn't exist.</p>
+                </div>
+              </div>} />
             </Routes>
           </Layout>
           <Toaster
