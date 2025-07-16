@@ -1,8 +1,9 @@
 # MessageCraft Essential Dependencies
 # Core FastAPI and async support
-fastapi
-uvicorn[standard]
-pydantic
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
 python-multipart
 
 # Database
@@ -16,6 +17,7 @@ langchain
 langchain-anthropic
 langchain-core
 langchain-community
+langchain-text-splitters
 
 # HTTP and API
 aiohttp
@@ -27,9 +29,10 @@ python-dotenv
 Pillow
 jinja2
 
-# Password hashing
+# Authentication and security
 bcrypt
 passlib[bcrypt]
+PyJWT
 
 # Payment processing (optional)
 stripe
