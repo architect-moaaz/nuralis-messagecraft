@@ -97,14 +97,7 @@ class EnhancedDatabaseManager:
     
     async def use_kit_generation(self, user_id: str) -> Dict:
         """Use a credit or free kit for generation"""
-        # Set production mode for database function
-        if settings.IS_PRODUCTION:
-            self.supabase.rpc("set_config", {
-                "setting": "app.is_production",
-                "value": "true"
-            }).execute()
-        
-        # Call database function
+        # Call database function directly
         result = self.supabase.rpc("use_kit_generation", {"p_user_id": user_id}).execute()
         
         if result.data and len(result.data) > 0:
