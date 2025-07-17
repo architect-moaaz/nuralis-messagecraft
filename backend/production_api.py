@@ -372,9 +372,10 @@ async def generate_playbook_endpoint(
         # Initialize agents with session tracking
         agents = MessageCraftAgentsWithReflection(
             quality_threshold=9.0,
-            session_id=session_id,
             db_manager=db_manager
         )
+        # Set the session ID for tracking
+        agents.current_session_id = session_id
         
         # Process in background
         background_tasks.add_task(

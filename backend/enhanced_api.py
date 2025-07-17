@@ -124,9 +124,10 @@ async def process_playbook(session_id: str, business_input: str, questionnaire_d
         # Initialize LangGraph agent system with reflection and stage tracking
         agent_system = MessageCraftAgentsWithReflection(
             quality_threshold=9.0,
-            session_id=session_id,
             db_manager=db_manager
         )
+        # Set the session ID for tracking
+        agent_system.current_session_id = session_id
         
         # Run the complete workflow with session tracking
         results = await agent_system.generate_messaging_playbook(
