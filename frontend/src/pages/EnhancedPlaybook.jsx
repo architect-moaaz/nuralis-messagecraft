@@ -121,10 +121,46 @@ const EnhancedPlaybook = () => {
 
   const handleDownload = async () => {
     try {
-      toast.success('Download feature coming soon!');
-      // Implementation for PDF download
+      toast.success('Preparing PDF download...');
+      
+      // Make API call to download PDF
+      const response = await api.get(`/api/v1/download-playbook/${id}`, {
+        responseType: 'blob',
+      });
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Extract filename from response headers or use default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'Messaging_Playbook.pdf';
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+      
+      // Create download link and trigger click
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF downloaded successfully!');
     } catch (error) {
-      toast.error('Failed to download playbook');
+      console.error('Download error:', error);
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          'Failed to download PDF';
+      toast.error(errorMessage);
     }
   };
 

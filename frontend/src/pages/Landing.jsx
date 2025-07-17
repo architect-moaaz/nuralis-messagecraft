@@ -15,7 +15,7 @@ const Landing = () => {
     {
       icon: SparklesIcon,
       title: "AI-Powered Discovery",
-      description: "Our intelligent agents analyze your business to uncover unique insights and opportunities."
+      description: "Our intelligent AI analyzes your business to uncover unique insights and opportunities."
     },
     {
       icon: ChartBarIcon,
@@ -52,8 +52,8 @@ const Landing = () => {
     },
     {
       step: "2",
-      title: "AI Agents Analyze",
-      description: "Our 6 specialized agents work together to create your messaging strategy."
+      title: "AI Analysis",
+      description: "Our advanced AI technology works to create your messaging strategy."
     },
     {
       step: "3",
@@ -134,10 +134,10 @@ const Landing = () => {
             className="text-center"
           >
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
-              Powered by 6 Specialized AI Agents
+              Advanced AI-Powered Messaging
             </h2>
             <p className="mt-4 text-xl text-gray-600 max-w-3xl mx-auto">
-              Each agent is an expert in their domain, working together to create 
+              Advanced AI technology analyzes your business to create 
               comprehensive messaging that resonates with your audience.
             </p>
           </motion.div>

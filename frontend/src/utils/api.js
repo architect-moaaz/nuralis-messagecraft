@@ -29,9 +29,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-      toast.error('Session expired. Please login again.');
+      // Don't automatically logout on 401 if it's a playbook generation request
+      // This allows better error handling in the component
+      if (!error.config?.url?.includes('/api/v1/generate-playbook')) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        toast.error('Session expired. Please login again.');
+      }
     }
     return Promise.reject(error);
   }

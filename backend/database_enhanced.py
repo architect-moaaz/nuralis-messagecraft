@@ -188,7 +188,43 @@ class EnhancedDatabaseManager:
         }
         
         result = self.supabase.table("user_sessions").insert(session_data).execute()
-        return result.data[0]["id"]
+        session_id = result.data[0]["id"]
+        
+        # Initialize generation stages
+        await self.initialize_generation_stages(session_id)
+        
+        return session_id
+    
+    async def initialize_generation_stages(self, session_id: str) -> None:
+        """Initialize generation stages for a session"""
+        try:
+            self.supabase.rpc('initialize_generation_stages', {'p_session_id': session_id}).execute()
+        except Exception as e:
+            logging.error(f"Failed to initialize generation stages: {e}")
+    
+    async def update_stage_status(self, session_id: str, stage_name: str, status: str, 
+                                 stage_data: Optional[Dict] = None, error_message: Optional[str] = None) -> None:
+        """Update the status of a generation stage"""
+        try:
+            params = {
+                'p_session_id': session_id,
+                'p_stage_name': stage_name,
+                'p_status': status,
+                'p_stage_data': stage_data,
+                'p_error_message': error_message
+            }
+            self.supabase.rpc('update_stage_status', params).execute()
+        except Exception as e:
+            logging.error(f"Failed to update stage status: {e}")
+    
+    async def get_generation_progress(self, session_id: str) -> List[Dict]:
+        """Get generation progress for a session"""
+        try:
+            result = self.supabase.rpc('get_generation_progress', {'p_session_id': session_id}).execute()
+            return result.data or []
+        except Exception as e:
+            logging.error(f"Failed to get generation progress: {e}")
+            return []
     
     async def save_messaging_results(self, session_id: str, results: Dict):
         """Save complete messaging playbook results"""
@@ -220,6 +256,33 @@ class EnhancedDatabaseManager:
                     playbook["results"] = None
         
         return playbooks
+    
+    async def get_playbook_by_id(self, playbook_id: str, user_id: str) -> Optional[Dict]:
+        """Get a single playbook by ID"""
+        result = self.supabase.table("user_sessions").select("*").eq("id", playbook_id).eq("user_id", user_id).execute()
+        
+        if not result.data:
+            return None
+            
+        playbook = result.data[0]
+        
+        # Parse the JSON results field
+        if playbook.get("results") and isinstance(playbook["results"], str):
+            try:
+                playbook["results"] = json.loads(playbook["results"])
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse results for playbook {playbook.get('id')}")
+                playbook["results"] = {}
+                
+        return playbook
+    
+    async def delete_playbook(self, playbook_id: str, user_id: str):
+        """Delete a specific playbook"""
+        # Verify ownership and delete
+        result = self.supabase.table("user_sessions").delete().eq("id", playbook_id).eq("user_id", user_id).execute()
+        
+        if not result.data:
+            raise Exception("Playbook not found or access denied")
     
     # Payment Management
     async def record_payment(

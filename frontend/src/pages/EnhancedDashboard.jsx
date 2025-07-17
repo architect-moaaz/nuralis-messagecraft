@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { formatScore } from '../utils/formatters';
 import DiscoveryQuestionnaire from '../components/DiscoveryQuestionnaire';
+import { useAuth } from '../contexts/AuthContext';
 import {
   ClockIcon,
   DocumentTextIcon,
@@ -43,32 +44,63 @@ const ProgressIndicator = ({ currentStep, steps }) => {
   );
 };
 
-// Agent activity indicator
-const AgentActivity = ({ isActive, agentName, step }) => {
+// Agent activity indicator with real status
+const AgentActivity = ({ status, agentName, step, startedAt, completedAt, errorMessage }) => {
+  const getStatusColor = () => {
+    switch (status) {
+      case 'completed': return 'bg-green-500';
+      case 'in_progress': return 'bg-clarity-blue animate-pulse';
+      case 'failed': return 'bg-red-500';
+      default: return 'bg-gray-400';
+    }
+  };
+
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'completed': return <CheckCircleIcon className="w-4 h-4 text-green-600" />;
+      case 'in_progress': return <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-clarity-blue" />;
+      case 'failed': return <ExclamationTriangleIcon className="w-4 h-4 text-red-600" />;
+      default: return null;
+    }
+  };
+
+  const getBorderColor = () => {
+    switch (status) {
+      case 'completed': return 'border-green-200 bg-green-50';
+      case 'in_progress': return 'border-clarity-blue/20 bg-clarity-blue/5';
+      case 'failed': return 'border-red-200 bg-red-50';
+      default: return 'border-gray-200 bg-gray-50';
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`flex items-center gap-3 p-3 rounded-lg border ${
-        isActive 
-          ? 'bg-clarity-blue/5 border-clarity-blue/20' 
-          : 'bg-gray-50 border-gray-200'
-      }`}
+      className={`flex items-center gap-3 p-3 rounded-lg border ${getBorderColor()}`}
     >
-      <div className={`w-3 h-3 rounded-full ${
-        isActive ? 'bg-clarity-blue animate-pulse' : 'bg-gray-400'
-      }`} />
+      <div className={`w-3 h-3 rounded-full ${getStatusColor()}`} />
       <div className="flex-1">
         <p className={`text-sm font-medium ${
-          isActive ? 'text-midnight-navy' : 'text-gray-600'
+          status === 'in_progress' ? 'text-midnight-navy' : 
+          status === 'completed' ? 'text-green-800' :
+          status === 'failed' ? 'text-red-800' : 'text-gray-600'
         }`}>
           {agentName}
         </p>
-        <p className="text-xs text-gray-500">{step}</p>
+        <p className="text-xs text-gray-500">
+          {errorMessage ? `Error: ${errorMessage}` : step}
+        </p>
+        {(startedAt || completedAt) && (
+          <p className="text-xs text-gray-400 mt-1">
+            {status === 'completed' && completedAt ? 
+              `Completed ${new Date(completedAt).toLocaleTimeString()}` :
+              startedAt ? `Started ${new Date(startedAt).toLocaleTimeString()}` : ''
+            }
+          </p>
+        )}
       </div>
-      {isActive && (
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-clarity-blue" />
-      )}
+      {getStatusIcon()}
     </motion.div>
   );
 };
@@ -220,32 +252,39 @@ const PlaybookCard = ({ playbook, onView, onDownload, onDelete }) => {
 const EnhancedDashboard = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { refreshAuth } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentSession, setCurrentSession] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [generationProgress, setGenerationProgress] = useState(0);
   const [currentAgent, setCurrentAgent] = useState('');
+  const [stageProgress, setStageProgress] = useState([]);
   const [generationMode, setGenerationMode] = useState('quick'); // 'questionnaire' or 'quick'
   
   const { register, handleSubmit, formState: { errors }, reset, watch } = useForm();
   const businessDescription = watch('business_description', '');
 
-  // Agents for progress tracking
+  // Agents for progress tracking (updated to match database schema)
   const agents = [
-    { name: 'Business Discovery', step: 'Analyzing your business...' },
-    { name: 'Competitor Research', step: 'Researching competitors...' },
-    { name: 'Positioning Analysis', step: 'Finding opportunities...' },
-    { name: 'Messaging Framework', step: 'Creating messaging...' },
-    { name: 'Content Generation', step: 'Generating content...' },
-    { name: 'Quality Review', step: 'Reviewing quality...' },
+    { name: 'Business Discovery', step: 'Analyzing your business profile...' },
+    { name: 'Competitor Research', step: 'Researching market competitors...' },
+    { name: 'Positioning Analysis', step: 'Identifying positioning opportunities...' },
+    { name: 'Trust Building', step: 'Developing trust strategies...' },
+    { name: 'Emotional Intelligence', step: 'Creating emotional resonance...' },
+    { name: 'Social Proof Generation', step: 'Generating social proof content...' },
+    { name: 'Messaging Framework', step: 'Building messaging framework...' },
+    { name: 'Content Creation', step: 'Creating marketing content...' },
+    { name: 'Quality Review', step: 'Reviewing and scoring quality...' },
+    { name: 'Reflection & Refinement', step: 'Refining and optimizing...' },
+    { name: 'Final Assembly', step: 'Assembling final playbook...' },
   ];
 
   // Fetch user's playbooks
   const { data: playbooks, isLoading, refetch } = useQuery({
     queryKey: ['playbooks'],
     queryFn: async () => {
-      const response = await api.get('/api/v1/user/playbooks');
+      const response = await api.get('/api/v1/playbooks');
       return response.data.playbooks || [];
     },
     refetchInterval: isGenerating ? 3000 : false, // Poll while generating
@@ -293,6 +332,7 @@ const EnhancedDashboard = () => {
   // Generate playbook mutation
   const generatePlaybook = useMutation({
     mutationFn: async (data) => {
+      console.log('Making API call with data:', data);
       const response = await api.post('/api/v1/generate-playbook', data);
       return response.data;
     },
@@ -301,34 +341,56 @@ const EnhancedDashboard = () => {
       setIsGenerating(true);
       setGenerationProgress(0);
       setCurrentAgent('Business Discovery');
+      setStageProgress([]);
       toast.success(`Starting ${data.agent_system || 'playbook'} generation...`);
       pollForCompletion(data.session_id);
     },
     onError: (error) => {
-      toast.error(error.response?.data?.detail || 'Failed to generate playbook');
+      console.error('Generate playbook error:', error);
+      console.error('Error response:', error.response);
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          error.message || 
+                          'Failed to generate playbook';
+      toast.error(errorMessage);
+      
+      // If it's a 401 error, the interceptor will handle logout
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+      } else if (error.response?.status === 404) {
+        toast.error('API endpoint not found. Please check your connection.');
+      }
     },
   });
 
-  // Enhanced polling with progress simulation
+  // Enhanced polling with real-time progress tracking
   const pollForCompletion = async (sessionId) => {
-    let step = 0;
-    const maxSteps = 6;
-    
     const interval = setInterval(async () => {
       try {
         const response = await api.get(`/api/v1/playbook-status/${sessionId}`);
+        const progress = response.data.progress;
         
-        // Simulate progress through agents
-        if (response.data.status === 'processing' && step < maxSteps) {
-          step++;
-          setGenerationProgress(step);
-          setCurrentAgent(agents[step - 1]?.name || 'Processing');
+        // Update progress from real API data
+        if (progress) {
+          setGenerationProgress(progress.completed_stages);
+          setStageProgress(progress.stages || []);
+          
+          // Set current agent based on actual stage progress
+          if (progress.current_stage) {
+            setCurrentAgent(progress.current_stage.stage_display_name || 'Processing');
+          } else if (progress.completed_stages < progress.total_stages) {
+            // Find the next pending stage
+            const nextStage = progress.stages?.find(stage => stage.status === 'pending');
+            if (nextStage) {
+              setCurrentAgent(nextStage.stage_display_name);
+            }
+          }
         }
         
         if (response.data.status === 'completed') {
           clearInterval(interval);
           setIsGenerating(false);
-          setGenerationProgress(maxSteps);
+          setGenerationProgress(progress?.total_stages || 11);
           setCurrentAgent('Completed');
           
           // Invalidate and refetch
@@ -346,32 +408,50 @@ const EnhancedDashboard = () => {
         clearInterval(interval);
         setIsGenerating(false);
         console.error('Polling error:', error);
+        toast.error('Connection error. Please refresh the page.');
       }
-    }, 3000);
+    }, 2000); // Poll every 2 seconds for better responsiveness
 
-    // Timeout after 5 minutes
+    // Timeout after 8 minutes (increased for longer generation times)
     setTimeout(() => {
       clearInterval(interval);
       if (isGenerating) {
         setIsGenerating(false);
         toast.error('Generation timed out. Please try again.');
       }
-    }, 300000);
+    }, 480000);
   };
 
   const onSubmit = (data) => {
     generatePlaybook.mutate(data);
   };
 
-  const handleQuestionnaireComplete = (questionnaireData) => {
+  const handleQuestionnaireComplete = async (questionnaireData) => {
+    // Validate required fields
+    if (!questionnaireData.business_description || !questionnaireData.business_name) {
+      toast.error('Please ensure all required fields are completed');
+      return;
+    }
+    
     // Process questionnaire data into our API format
     const processedData = {
       business_description: questionnaireData.business_description,
       company_name: questionnaireData.business_name,
-      industry: questionnaireData.business_age, // We can map this better later
+      industry: questionnaireData.products_services || 'General', // Use products/services or fallback
       questionnaire_data: questionnaireData
     };
     
+    console.log('Submitting questionnaire data:', processedData);
+    
+    // Try to refresh authentication before making the API call
+    const authSuccess = await refreshAuth();
+    if (!authSuccess) {
+      toast.error('Your session has expired. Please log in again.');
+      navigate('/login');
+      return;
+    }
+    
+    console.log('Authentication verified, proceeding with generation');
     generatePlaybook.mutate(processedData);
   };
 
@@ -405,15 +485,46 @@ const EnhancedDashboard = () => {
 
   const handleDownload = async (id) => {
     try {
-      // Simulate download since endpoint may not be fully implemented
-      toast.success('Download started...');
-      // In a real implementation:
-      // const response = await api.get(`/api/v1/download-playbook/${id}`, {
-      //   responseType: 'blob',
-      // });
-      // ... handle download
+      toast.success('Preparing PDF download...');
+      
+      // Make API call to download PDF
+      const response = await api.get(`/api/v1/download-playbook/${id}`, {
+        responseType: 'blob',
+      });
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Extract filename from response headers or use default
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'Messaging_Playbook.pdf';
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '');
+        }
+      }
+      
+      // Create download link and trigger click
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF downloaded successfully!');
     } catch (error) {
-      toast.error('Download feature coming soon!');
+      console.error('Download error:', error);
+      const errorMessage = error.response?.data?.detail || 
+                          error.response?.data?.message || 
+                          'Failed to download PDF';
+      toast.error(errorMessage);
     }
   };
 
@@ -427,7 +538,7 @@ const EnhancedDashboard = () => {
             Dashboard
           </h1>
           <p className="mt-2 text-slate-gray">
-            Generate AI-powered messaging playbooks with our LangGraph multi-agent system
+            Generate AI-powered messaging playbooks for your business
           </p>
         </div>
 
@@ -475,7 +586,7 @@ const EnhancedDashboard = () => {
                 Generate New Messaging Playbook
               </h2>
               <p className="text-slate-gray">
-                Powered by LangGraph multi-agent AI system
+                Transform your business description into powerful messaging
               </p>
             </div>
           </div>
@@ -557,21 +668,36 @@ const EnhancedDashboard = () => {
                     Generating Your Playbook
                   </h3>
                   <span className="text-sm text-clarity-blue">
-                    {generationProgress}/{agents.length} agents completed
+                    {generationProgress}/{stageProgress.length || 11} agents completed
                   </span>
                 </div>
                 
-                <ProgressIndicator currentStep={generationProgress} steps={agents.length} />
+                <ProgressIndicator currentStep={generationProgress} steps={stageProgress.length || 11} />
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {agents.map((agent, index) => (
-                    <AgentActivity
-                      key={agent.name}
-                      isActive={index === generationProgress - 1}
-                      agentName={agent.name}
-                      step={agent.step}
-                    />
-                  ))}
+                  {stageProgress.length > 0 ? (
+                    stageProgress.map((stage) => (
+                      <AgentActivity
+                        key={stage.stage_name}
+                        status={stage.status}
+                        agentName={stage.stage_display_name}
+                        step={agents.find(a => a.name === stage.stage_display_name)?.step || 'Processing...'}
+                        startedAt={stage.started_at}
+                        completedAt={stage.completed_at}
+                        errorMessage={stage.error_message}
+                      />
+                    ))
+                  ) : (
+                    // Fallback to show agent placeholders while loading
+                    agents.map((agent, index) => (
+                      <AgentActivity
+                        key={agent.name}
+                        status={index < generationProgress ? 'completed' : index === generationProgress ? 'in_progress' : 'pending'}
+                        agentName={agent.name}
+                        step={agent.step}
+                      />
+                    ))
+                  )}
                 </div>
               </motion.div>
             )}
@@ -656,7 +782,7 @@ const EnhancedDashboard = () => {
                     </div>
                     <div className="flex items-center">
                       <Cog6ToothIcon className="w-4 h-4 mr-1" />
-                      6 AI agents
+                      Advanced AI processing
                     </div>
                     <div className="flex items-center">
                       <StarIcon className="w-4 h-4 mr-1" />

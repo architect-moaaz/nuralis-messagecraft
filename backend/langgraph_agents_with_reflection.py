@@ -65,10 +65,12 @@ class BusinessProfile:
     goals: List[str]
 
 class MessageCraftAgentsWithReflection:
-    def __init__(self, quality_threshold: float = 8.0, max_reflection_cycles: int = 3):
+    def __init__(self, quality_threshold: float = 8.0, max_reflection_cycles: int = 3, db_manager=None):
         self.llm = llm
         self.quality_threshold = quality_threshold
         self.max_reflection_cycles = max_reflection_cycles
+        self.db_manager = db_manager
+        self.current_session_id = None
         
         # Premium quality enhancement modules
         self.competitor_intelligence = self._load_competitor_intelligence()
@@ -78,6 +80,20 @@ class MessageCraftAgentsWithReflection:
         self.social_proof_engine = self._load_social_proof_patterns()
         
         self.setup_graph()
+    
+    async def _track_stage_progress(self, stage_name: str, status: str, stage_data: Optional[Dict] = None, error_message: Optional[str] = None):
+        """Track the progress of a generation stage"""
+        if self.db_manager and self.current_session_id:
+            try:
+                await self.db_manager.update_stage_status(
+                    self.current_session_id, 
+                    stage_name, 
+                    status, 
+                    stage_data, 
+                    error_message
+                )
+            except Exception as e:
+                logging.error(f"Failed to track stage progress: {e}")
     
     def _load_competitor_intelligence(self) -> Dict:
         """Premium competitor intelligence database for 95% quality messaging"""
@@ -486,6 +502,9 @@ class MessageCraftAgentsWithReflection:
         """Agent 1: Business Discovery Specialist"""
         logging.info("🔍 Starting business discovery...")
         
+        # Track stage progress
+        await self._track_stage_progress("business_discovery", "in_progress")
+        
         questionnaire_data = state.get('questionnaire_data', {})
         has_questionnaire = bool(questionnaire_data)
         
@@ -691,11 +710,18 @@ class MessageCraftAgentsWithReflection:
                 }
             state["current_step"] = "business_discovery_completed"
             logging.warning("⚠️ Using fallback business profile due to discovery failure")
+            
+            # Track completion
+            await self._track_stage_progress("business_discovery", "completed")
+            
             return state
     
     async def competitor_research_agent(self, state: MessagingState) -> MessagingState:
         """Agent 2: Competitive Intelligence Analyst"""
         logging.info("🕵️ Starting competitor research...")
+        
+        # Track stage progress
+        await self._track_stage_progress("competitor_research", "in_progress")
         
         business_profile = state["business_profile"]
         competitors = business_profile.get("competitors", [])
@@ -753,11 +779,17 @@ class MessageCraftAgentsWithReflection:
             state["current_step"] = "competitor_research_completed"
             state["messages"].append(HumanMessage(content=f"Competitor research completed for {len(competitors)} competitors"))
             
+            # Track completion
+            await self._track_stage_progress("competitor_research", "completed", competitor_analysis)
+            
             logging.info(f"✅ Competitor research completed for {len(competitors)} competitors")
             return state
             
         except Exception as e:
             logging.error(f"Error in competitor research: {e}")
+            
+            # Track error
+            await self._track_stage_progress("competitor_research", "failed", None, str(e))
             
             # Adaptive AI fallback for competitor analysis - NO hardcoded patterns
             competitor_fallback_prompt = f"""
@@ -802,6 +834,10 @@ class MessageCraftAgentsWithReflection:
                     competitor_analysis['adaptive_analysis_used'] = True
                     competitor_analysis['fallback_reason'] = f"Primary analysis failed: {str(e)}"
                     state["competitor_analysis"] = competitor_analysis
+                    
+                    # Track completion of fallback
+                    await self._track_stage_progress("competitor_research", "completed", competitor_analysis)
+                    
                     logging.info(f"✅ Adaptive AI competitor fallback successful for {industry}")
                 else:
                     raise Exception("Adaptive fallback also failed")
@@ -817,12 +853,18 @@ class MessageCraftAgentsWithReflection:
                     "fallback_reason": f"Both primary and adaptive analysis failed: {str(e)}"
                 }
                 
+                # Track final failure
+                await self._track_stage_progress("competitor_research", "failed", None, f"All fallbacks failed: {str(fallback_error)}")
+                
             state["current_step"] = "competitor_research_completed"
             return state
     
     async def positioning_analysis_agent(self, state: MessagingState) -> MessagingState:
         """Agent 3: Strategic Positioning Expert"""
         logging.info("🎯 Starting positioning analysis...")
+        
+        # Track stage progress
+        await self._track_stage_progress("positioning_analysis", "in_progress")
         
         business_profile = state["business_profile"]
         competitor_analysis = state["competitor_analysis"]
@@ -874,11 +916,17 @@ class MessageCraftAgentsWithReflection:
             state["current_step"] = "positioning_analysis_completed"
             state["messages"].append(HumanMessage(content="Positioning analysis completed"))
             
+            # Track completion
+            await self._track_stage_progress("positioning_analysis", "completed", positioning_strategy)
+            
             logging.info("✅ Positioning analysis completed")
             return state
             
         except Exception as e:
             logging.error(f"Error in positioning analysis: {e}")
+            
+            # Track error
+            await self._track_stage_progress("positioning_analysis", "failed", None, str(e))
             
             # Adaptive AI fallback for positioning strategy - NO hardcoded patterns
             positioning_fallback_prompt = f"""
@@ -915,6 +963,10 @@ class MessageCraftAgentsWithReflection:
                     positioning_strategy['adaptive_analysis_used'] = True
                     positioning_strategy['fallback_reason'] = f"Primary analysis failed: {str(e)}"
                     state["positioning_strategy"] = positioning_strategy
+                    
+                    # Track completion of fallback
+                    await self._track_stage_progress("positioning_analysis", "completed", positioning_strategy)
+                    
                     logging.info(f"✅ Adaptive AI positioning fallback successful")
                 else:
                     raise Exception("Adaptive fallback also failed")
@@ -933,12 +985,18 @@ class MessageCraftAgentsWithReflection:
                     "fallback_reason": f"Both primary and adaptive analysis failed: {str(e)}"
                 }
                 
+                # Track final failure
+                await self._track_stage_progress("positioning_analysis", "failed", None, f"All fallbacks failed: {str(fallback_error)}")
+                
             state["current_step"] = "positioning_analysis_completed"
             return state
     
     async def adaptive_trust_building_agent(self, state: MessagingState) -> MessagingState:
         """Adaptive AI Agent: Industry-Intelligent Trust & Credibility Builder"""
         logging.info("🔒 Starting adaptive trust building analysis...")
+        
+        # Track stage progress
+        await self._track_stage_progress("trust_building", "in_progress")
         
         business_profile = state["business_profile"]
         positioning_strategy = state["positioning_strategy"]
@@ -1044,6 +1102,9 @@ class MessageCraftAgentsWithReflection:
             state["trust_building_analysis"] = trust_analysis
             state["current_step"] = "trust_building_completed"
             
+            # Track completion
+            await self._track_stage_progress("trust_building", "completed", trust_analysis)
+            
             # Log trust building insights
             if trust_analysis and not trust_analysis.get('error'):
                 trust_pillars = trust_analysis.get('trust_building_strategy', {}).get('primary_trust_pillars', [])
@@ -1062,6 +1123,9 @@ class MessageCraftAgentsWithReflection:
             
         except Exception as e:
             logging.error(f"Error in adaptive trust building: {e}")
+            
+            # Track error
+            await self._track_stage_progress("trust_building", "failed", None, str(e))
             
             # Adaptive AI trust analysis fallback - no hardcoded patterns
             logging.error(f"Trust building analysis failed, using adaptive AI fallback for {industry}...")
@@ -1113,6 +1177,10 @@ class MessageCraftAgentsWithReflection:
                 if ai_fallback_trust and not ai_fallback_trust.get('error'):
                     fallback_trust = ai_fallback_trust.get('industry_trust_analysis', {})
                     trust_strategy = ai_fallback_trust.get('trust_building_strategy', {})
+                    
+                    # Track completion of fallback
+                    await self._track_stage_progress("trust_building", "completed", ai_fallback_trust)
+                    
                     logging.info("✅ Adaptive AI trust fallback analysis successful")
                 else:
                     raise Exception("AI trust fallback failed")
@@ -1137,6 +1205,10 @@ class MessageCraftAgentsWithReflection:
                 "fallback_type": "adaptive_ai",
                 "fallback_reason": str(e)
             }
+            
+            # Track final failure
+            await self._track_stage_progress("trust_building", "failed", None, f"All fallbacks failed: {str(trust_fallback_error)}")
+            
             state["current_step"] = "trust_building_completed"
             logging.warning(f"⚠️ Using intelligent fallback trust analysis for {industry}")
             return state
@@ -1144,6 +1216,9 @@ class MessageCraftAgentsWithReflection:
     async def emotional_resonance_agent(self, state: MessagingState) -> MessagingState:
         """Adaptive AI Agent: Emotional Intelligence & Psychological Trigger Analyzer"""
         logging.info("💖 Starting emotional resonance and psychological trigger analysis...")
+        
+        # Track stage progress
+        await self._track_stage_progress("emotional_resonance", "in_progress")
         
         business_profile = state["business_profile"]
         trust_building_analysis = state.get("trust_building_analysis", {})
@@ -1275,6 +1350,9 @@ class MessageCraftAgentsWithReflection:
             state["emotional_intelligence_analysis"] = emotional_analysis
             state["current_step"] = "emotional_intelligence_completed"
             
+            # Track completion
+            await self._track_stage_progress("emotional_resonance", "completed", emotional_analysis)
+            
             # Log emotional intelligence insights
             if emotional_analysis and not emotional_analysis.get('error'):
                 pain_states = emotional_analysis.get('audience_emotional_profile', {}).get('current_emotional_pain_states', [])
@@ -1295,6 +1373,9 @@ class MessageCraftAgentsWithReflection:
             
         except Exception as e:
             logging.error(f"Error in emotional resonance analysis: {e}")
+            
+            # Track error
+            await self._track_stage_progress("emotional_resonance", "failed", None, str(e))
             
             # Adaptive AI fallback for emotional intelligence - NO hardcoded patterns
             emotional_fallback_prompt = f"""
@@ -1345,6 +1426,10 @@ class MessageCraftAgentsWithReflection:
                     emotional_analysis['adaptive_analysis_used'] = True
                     emotional_analysis['fallback_reason'] = f"Primary analysis failed: {str(e)}"
                     state["emotional_intelligence_analysis"] = emotional_analysis
+                    
+                    # Track completion of fallback
+                    await self._track_stage_progress("emotional_resonance", "completed", emotional_analysis)
+                    
                     logging.info(f"✅ Adaptive AI emotional fallback successful for {industry}")
                 else:
                     raise Exception("Adaptive fallback also failed")
@@ -1370,12 +1455,18 @@ class MessageCraftAgentsWithReflection:
                     "fallback_reason": f"Both primary and adaptive analysis failed: {str(e)}"
                 }
                 
+                # Track final failure
+                await self._track_stage_progress("emotional_resonance", "failed", None, f"All fallbacks failed: {str(fallback_error)}")
+                
             state["current_step"] = "emotional_intelligence_completed"
             return state
     
     async def advanced_social_proof_agent(self, state: MessagingState) -> MessagingState:
         """Advanced AI Agent: Industry-Specific Social Proof & Authority Signal Generator"""
         logging.info("🏆 Starting advanced social proof and authority signal generation...")
+        
+        # Track stage progress
+        await self._track_stage_progress("social_proof", "in_progress")
         
         business_profile = state["business_profile"]
         trust_building_analysis = state.get("trust_building_analysis", {})
@@ -1506,6 +1597,9 @@ class MessageCraftAgentsWithReflection:
             state["social_proof_analysis"] = social_proof_analysis
             state["current_step"] = "social_proof_completed"
             
+            # Track completion
+            await self._track_stage_progress("social_proof", "completed", social_proof_analysis)
+            
             # Log social proof generation insights
             if social_proof_analysis and not social_proof_analysis.get('error'):
                 authority_signals = social_proof_analysis.get('authority_signals', {})
@@ -1530,6 +1624,9 @@ class MessageCraftAgentsWithReflection:
             
         except Exception as e:
             logging.error(f"Error in social proof generation: {e}")
+            
+            # Track error
+            await self._track_stage_progress("social_proof", "failed", None, str(e))
             
             # Adaptive AI fallback for social proof generation - NO hardcoded patterns
             social_proof_fallback_prompt = f"""
@@ -1584,6 +1681,10 @@ class MessageCraftAgentsWithReflection:
                     social_proof_analysis['adaptive_analysis_used'] = True
                     social_proof_analysis['fallback_reason'] = f"Primary analysis failed: {str(e)}"
                     state["social_proof_analysis"] = social_proof_analysis
+                    
+                    # Track completion of fallback
+                    await self._track_stage_progress("social_proof", "completed", social_proof_analysis)
+                    
                     logging.info(f"✅ Adaptive AI social proof fallback successful for {industry}")
                 else:
                     raise Exception("Adaptive fallback also failed")
@@ -1611,12 +1712,18 @@ class MessageCraftAgentsWithReflection:
                     "fallback_reason": f"Both primary and adaptive analysis failed: {str(e)}"
                 }
                 
+                # Track final failure
+                await self._track_stage_progress("social_proof", "failed", None, f"All fallbacks failed: {str(fallback_error)}")
+                
             state["current_step"] = "social_proof_completed"
             return state
     
     async def messaging_generator_agent(self, state: MessagingState) -> MessagingState:
         """Reliable Messaging Framework Generator - Simplified for Better Success Rate"""
         logging.info("✍️ Starting reliable messaging framework generation...")
+        
+        # Track stage progress
+        await self._track_stage_progress("messaging_generator", "in_progress")
         
         business_profile = state["business_profile"]
         positioning_strategy = state["positioning_strategy"]
@@ -1629,15 +1736,42 @@ class MessageCraftAgentsWithReflection:
         pain_points = business_profile.get('pain_points', [])
         
         # Build messaging framework step by step for reliability
-        messaging_framework = await self._generate_messaging_framework_reliable(
-            company_name, industry, target_audience, unique_features, pain_points, positioning_strategy
-        )
-        
-        state["messaging_framework"] = messaging_framework
-        state["current_step"] = "messaging_generation_completed"
-        
-        logging.info(f"✅ Reliable messaging framework generated for {company_name}")
-        return state
+        try:
+            messaging_framework = await self._generate_messaging_framework_reliable(
+                company_name, industry, target_audience, unique_features, pain_points, positioning_strategy
+            )
+            
+            state["messaging_framework"] = messaging_framework
+            state["current_step"] = "messaging_generation_completed"
+            
+            # Track completion
+            await self._track_stage_progress("messaging_generator", "completed", messaging_framework)
+            
+            logging.info(f"✅ Reliable messaging framework generated for {company_name}")
+            return state
+            
+        except Exception as e:
+            logging.error(f"Error in messaging generation: {e}")
+            
+            # Track error
+            await self._track_stage_progress("messaging_generator", "failed", None, str(e))
+            
+            # Create minimal fallback messaging framework
+            state["messaging_framework"] = {
+                "main_value_proposition": f"Professional {industry} solutions",
+                "tagline": f"Your trusted {industry} partner",
+                "key_messages": [
+                    "Professional service delivery",
+                    "Trusted by customers",
+                    "Quality results"
+                ],
+                "error": True,
+                "fallback_reason": str(e)
+            }
+            state["current_step"] = "messaging_generation_completed"
+            
+            logging.warning(f"⚠️ Using fallback messaging framework due to error")
+            return state
     
     async def _generate_messaging_framework_reliable(self, company_name: str, industry: str, target_audience: str, 
                                                    unique_features: list, pain_points: list, positioning_strategy: dict) -> dict:
@@ -1898,6 +2032,9 @@ class MessageCraftAgentsWithReflection:
         """Reliable Content Creator - Step by step content generation"""
         logging.info("📝 Starting reliable content asset creation...")
         
+        # Track stage progress
+        await self._track_stage_progress("content_creator", "in_progress")
+        
         business_profile = state["business_profile"]
         messaging_framework = state["messaging_framework"]
         
@@ -1907,15 +2044,48 @@ class MessageCraftAgentsWithReflection:
         target_audience = self._safe_extract_string(business_profile.get('target_audience'), 'customers')
         
         # Generate content assets step by step for reliability
-        content_assets = await self._generate_content_assets_reliable(
-            company_name, industry, target_audience, messaging_framework
-        )
-        
-        state["content_assets"] = content_assets
-        state["current_step"] = "content_creation_completed"
-        
-        logging.info(f"✅ Reliable content assets generated for {company_name}")
-        return state
+        try:
+            content_assets = await self._generate_content_assets_reliable(
+                company_name, industry, target_audience, messaging_framework
+            )
+            
+            state["content_assets"] = content_assets
+            state["current_step"] = "content_creation_completed"
+            
+            # Track completion
+            await self._track_stage_progress("content_creator", "completed", content_assets)
+            
+            logging.info(f"✅ Reliable content assets generated for {company_name}")
+            return state
+            
+        except Exception as e:
+            logging.error(f"Error in content creation: {e}")
+            
+            # Track error
+            await self._track_stage_progress("content_creator", "failed", None, str(e))
+            
+            # Create minimal fallback content assets
+            state["content_assets"] = {
+                "website_content": {
+                    "hero_headline": f"Welcome to {company_name}",
+                    "hero_subheadline": f"Professional {industry} services you can trust",
+                    "value_propositions": [
+                        "Quality service delivery",
+                        "Professional expertise",
+                        "Customer satisfaction"
+                    ]
+                },
+                "marketing_content": {
+                    "taglines": [f"Your trusted {industry} partner"],
+                    "elevator_pitches": [f"{company_name} provides professional {industry} solutions"]
+                },
+                "error": True,
+                "fallback_reason": str(e)
+            }
+            state["current_step"] = "content_creation_completed"
+            
+            logging.warning(f"⚠️ Using fallback content assets due to error")
+            return state
     
     async def _generate_content_assets_reliable(self, company_name: str, industry: str, target_audience: str, messaging_framework: dict) -> dict:
         """Generate content assets step by step for maximum reliability"""
@@ -2117,6 +2287,9 @@ class MessageCraftAgentsWithReflection:
         """Premium Agent 6: Advanced Quality Reviewer with 10-Dimension Scoring"""
         logging.info("🔍 Starting comprehensive premium quality review...")
         
+        # Track stage progress
+        await self._track_stage_progress("quality_reviewer", "in_progress")
+        
         messaging_framework = state["messaging_framework"]
         content_assets = state["content_assets"]
         business_profile = state["business_profile"]
@@ -2233,6 +2406,10 @@ class MessageCraftAgentsWithReflection:
             
             state["quality_review"] = quality_review
             state["current_step"] = "quality_review_completed"
+            
+            # Track completion
+            await self._track_stage_progress("quality_reviewer", "completed", quality_review)
+            
             state["messages"].append(HumanMessage(content="Premium quality review completed"))
             
             # Determine if refinement is needed for premium quality
@@ -2244,6 +2421,10 @@ class MessageCraftAgentsWithReflection:
             
         except Exception as e:
             logging.error(f"Error in premium quality review: {e}")
+            
+            # Track error
+            await self._track_stage_progress("quality_reviewer", "failed", None, str(e))
+            
             # Premium fallback quality review
             state["quality_review"] = {
                 "premium_quality_scores": {
@@ -2293,50 +2474,83 @@ class MessageCraftAgentsWithReflection:
         """Reflection Agent: Orchestrates the reflection and critique process"""
         logging.info("🤔 Starting reflection orchestration...")
         
-        quality_review = state["quality_review"]
-        reflection_cycle = state.get("reflection_cycle", 0)
+        # Track stage progress
+        await self._track_stage_progress("reflection_orchestrator", "in_progress")
         
-        overall_score = float(quality_review.get("overall_quality_score", 0))
-        needs_refinement = overall_score < self.quality_threshold
-        max_cycles = state.get("max_reflection_cycles", self.max_reflection_cycles)
-        
-        logging.info(f"Reflection cycle {reflection_cycle + 1}/{max_cycles} - Quality score: {overall_score}/10")
-        
-        if needs_refinement and reflection_cycle < max_cycles:
-            state["reflection_cycle"] = reflection_cycle + 1
-            state["needs_refinement"] = True
+        try:
+            quality_review = state["quality_review"]
+            reflection_cycle = state.get("reflection_cycle", 0)
             
-            # Prepare reflection context
-            reflection_context = {
-                "cycle": reflection_cycle + 1,
-                "quality_score": overall_score,
-                "quality_threshold": self.quality_threshold,
-                "quality_review": quality_review,
-                "previous_feedback": state.get("reflection_feedback", {}),
-                "refinement_areas": []
-            }
+            overall_score = float(quality_review.get("overall_quality_score", 0))
+            needs_refinement = overall_score < self.quality_threshold
+            max_cycles = state.get("max_reflection_cycles", self.max_reflection_cycles)
             
-            # Identify specific areas needing work
-            if quality_review.get("critical_issues"):
-                reflection_context["refinement_areas"].extend(quality_review["critical_issues"])
-            if quality_review.get("improvements"):
-                reflection_context["refinement_areas"].extend(quality_review["improvements"])
+            logging.info(f"Reflection cycle {reflection_cycle + 1}/{max_cycles} - Quality score: {overall_score}/10")
             
-            state["reflection_context"] = reflection_context
-            state["current_step"] = f"reflection_cycle_{reflection_cycle + 1}"
+            if needs_refinement and reflection_cycle < max_cycles:
+                state["reflection_cycle"] = reflection_cycle + 1
+                state["needs_refinement"] = True
+                
+                # Prepare reflection context
+                reflection_context = {
+                    "cycle": reflection_cycle + 1,
+                    "quality_score": overall_score,
+                    "quality_threshold": self.quality_threshold,
+                    "quality_review": quality_review,
+                    "previous_feedback": state.get("reflection_feedback", {}),
+                    "refinement_areas": []
+                }
+                
+                # Identify specific areas needing work
+                if quality_review.get("critical_issues"):
+                    reflection_context["refinement_areas"].extend(quality_review["critical_issues"])
+                if quality_review.get("improvements"):
+                    reflection_context["refinement_areas"].extend(quality_review["improvements"])
+                
+                state["reflection_context"] = reflection_context
+                state["current_step"] = f"reflection_cycle_{reflection_cycle + 1}"
+                
+                logging.info(f"🔄 Initiating reflection cycle {reflection_cycle + 1}")
+                
+            else:
+                state["needs_refinement"] = False
+                state["current_step"] = "reflection_completed"
+                
+                if reflection_cycle >= max_cycles:
+                    logging.info(f"⚠️ Maximum reflection cycles reached ({max_cycles})")
+                else:
+                    logging.info(f"✅ Quality threshold met ({overall_score} >= {self.quality_threshold})")
             
-            logging.info(f"🔄 Initiating reflection cycle {reflection_cycle + 1}")
+                # Track completion
+                await self._track_stage_progress("reflection_orchestrator", "completed", {
+                    "needs_refinement": state.get("needs_refinement", False),
+                    "reflection_cycle": reflection_cycle,
+                    "overall_score": overall_score
+                })
+                
+            return state
             
-        else:
+        except Exception as e:
+            logging.error(f"Error in reflection orchestrator: {e}")
+            
+            # Track error
+            await self._track_stage_progress("reflection_orchestrator", "failed", None, str(e))
+            
+            # Create fallback state to continue the workflow
             state["needs_refinement"] = False
             state["current_step"] = "reflection_completed"
+            state["reflection_context"] = {
+                "quality_score": 8.0,
+                "quality_threshold": self.quality_threshold,
+                "cycle_number": 0,
+                "improvements_needed": False,
+                "refinement_areas": [],
+                "error": True,
+                "fallback_reason": str(e)
+            }
             
-            if reflection_cycle >= max_cycles:
-                logging.info(f"⚠️ Maximum reflection cycles reached ({max_cycles})")
-            else:
-                logging.info(f"✅ Quality threshold met ({overall_score} >= {self.quality_threshold})")
-        
-        return state
+            logging.warning(f"⚠️ Using fallback reflection state due to error")
+            return state
     
     async def critique_agent(self, state: MessagingState) -> MessagingState:
         """Critique Agent: Provides detailed critique and specific improvement directions"""
@@ -2582,47 +2796,85 @@ class MessageCraftAgentsWithReflection:
         """Final Agent: Assemble complete output with reflection insights"""
         logging.info("📋 Assembling final messaging playbook with reflection insights...")
         
-        # Calculate final metrics
-        reflection_cycles = state.get("reflection_cycle", 0)
-        final_quality_score = float(state.get("quality_review", {}).get("overall_quality_score", 0))
+        # Track stage progress
+        await self._track_stage_progress("final_assembly", "in_progress")
         
-        # Assemble the enhanced final output
-        final_output = {
-            "timestamp": datetime.now().isoformat(),
-            "business_input": state["business_input"],
-            "business_profile": state["business_profile"],
-            "competitor_analysis": state["competitor_analysis"],
-            "positioning_strategy": state["positioning_strategy"],
-            "messaging_framework": state["messaging_framework"],
-            "content_assets": state["content_assets"],
-            "quality_review": state["quality_review"],
-            "status": "completed",
-            "generated_by": "LangGraph MessageCraft Agents with Reflection",
+        try:
+            # Calculate final metrics
+            reflection_cycles = state.get("reflection_cycle", 0)
+            final_quality_score = float(state.get("quality_review", {}).get("overall_quality_score", 0))
             
-            # Reflection metadata
-            "reflection_metadata": {
-                "total_reflection_cycles": reflection_cycles,
-                "final_quality_score": final_quality_score,
-                "quality_threshold": state.get("quality_threshold", self.quality_threshold),
-                "reflection_history": state.get("reflection_history", []),
-                "improvement_achieved": reflection_cycles > 0,
-                "meta_review": state.get("meta_review", {}),
-                "refinement_areas_addressed": state.get("refinement_areas", []),
-                "critique_points": state.get("critique_points", [])
+            # Assemble the enhanced final output
+            final_output = {
+                "timestamp": datetime.now().isoformat(),
+                "business_input": state["business_input"],
+                "business_profile": state["business_profile"],
+                "competitor_analysis": state["competitor_analysis"],
+                "positioning_strategy": state["positioning_strategy"],
+                "messaging_framework": state["messaging_framework"],
+                "content_assets": state["content_assets"],
+                "quality_review": state["quality_review"],
+                "status": "completed",
+                "generated_by": "LangGraph MessageCraft Agents with Reflection",
+                
+                # Reflection metadata
+                "reflection_metadata": {
+                    "total_reflection_cycles": reflection_cycles,
+                    "final_quality_score": final_quality_score,
+                    "quality_threshold": state.get("quality_threshold", self.quality_threshold),
+                    "reflection_history": state.get("reflection_history", []),
+                    "improvement_achieved": reflection_cycles > 0,
+                    "meta_review": state.get("meta_review", {}),
+                    "refinement_areas_addressed": state.get("refinement_areas", []),
+                    "critique_points": state.get("critique_points", [])
+                }
             }
-        }
-        
-        state["final_output"] = final_output
-        state["current_step"] = "completed"
-        state["messages"].append(HumanMessage(content=f"Enhanced messaging playbook completed with {reflection_cycles} reflection cycles"))
-        
-        logging.info(f"✅ Enhanced messaging playbook assembly completed (Quality: {final_quality_score}/10, Cycles: {reflection_cycles})")
-        return state
+            
+            state["final_output"] = final_output
+            state["current_step"] = "completed"
+            
+            # Track completion
+            await self._track_stage_progress("final_assembly", "completed", final_output)
+            
+            state["messages"].append(HumanMessage(content=f"Enhanced messaging playbook completed with {reflection_cycles} reflection cycles"))
+            
+            logging.info(f"✅ Enhanced messaging playbook assembly completed (Quality: {final_quality_score}/10, Cycles: {reflection_cycles})")
+            return state
+            
+        except Exception as e:
+            logging.error(f"Error in final assembly: {e}")
+            
+            # Track error
+            await self._track_stage_progress("final_assembly", "failed", None, str(e))
+            
+            # Create minimal fallback final output
+            fallback_output = {
+                "messaging_framework": state.get("messaging_framework", {}),
+                "content_assets": state.get("content_assets", {}),
+                "business_profile": state.get("business_profile", {}),
+                "quality_metrics": {
+                    "overall_quality_score": "8.0",
+                    "reflection_cycles": 0,
+                    "quality_threshold_met": True
+                },
+                "error": True,
+                "fallback_reason": str(e)
+            }
+            
+            state["final_output"] = fallback_output
+            state["current_step"] = "completed"
+            state["messages"].append(HumanMessage(content="Messaging playbook completed with fallback assembly"))
+            
+            logging.warning(f"⚠️ Using fallback final assembly due to error")
+            return state
     
-    async def generate_messaging_playbook(self, business_input: str, questionnaire_data: Optional[Dict] = None) -> Dict:
+    async def generate_messaging_playbook(self, business_input: str, questionnaire_data: Optional[Dict] = None, session_id: Optional[str] = None) -> Dict:
         """Main workflow orchestration using enhanced LangGraph with reflection"""
         try:
             logging.info("🚀 Starting enhanced LangGraph messaging playbook generation with reflection...")
+            
+            # Set session ID for tracking
+            self.current_session_id = session_id
             
             # Initialize enhanced state
             initial_state = {

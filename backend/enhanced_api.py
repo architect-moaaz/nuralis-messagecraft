@@ -12,7 +12,7 @@ import logging
 import json
 from dotenv import load_dotenv
 from langgraph_agents_with_reflection import MessageCraftAgentsWithReflection
-from database import DatabaseManager
+from database_enhanced import EnhancedDatabaseManager
 from payment import PaymentManager
 from pdf_generator import PlaybookGenerator
 
@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 # Initialize services
-db_manager = DatabaseManager()
+db_manager = EnhancedDatabaseManager()
 payment_manager = PaymentManager()
 playbook_generator = PlaybookGenerator()
 
@@ -119,24 +119,120 @@ async def generate_playbook_endpoint(
 
 async def process_playbook(session_id: str, business_input: str, questionnaire_data: Optional[dict] = None):
     """Background task to process playbook generation"""
+    agent_system = None
     try:
-        # Initialize LangGraph agent system with reflection
+        # Initialize LangGraph agent system with reflection and stage tracking
         agent_system = MessageCraftAgentsWithReflection(
-            quality_threshold=8.0,
-            max_reflection_cycles=2
+            quality_threshold=9.0,
+            session_id=session_id,
+            db_manager=db_manager
         )
-        results = await agent_system.generate_messaging_playbook(business_input, questionnaire_data)
+        
+        # Run the complete workflow with session tracking
+        results = await agent_system.generate_messaging_playbook(
+            business_input,
+            "Company",  # Default company name
+            "General",  # Default industry
+            questionnaire_data or {},
+            session_id=session_id
+        )
+        
+        # Save results to database
         await db_manager.save_messaging_results(session_id, results)
+        
+        logging.info(f"Successfully completed playbook generation for session {session_id}")
+        
     except Exception as e:
-        # Handle errors and update session status
-        error_result = {"error": str(e), "status": "failed"}
-        await db_manager.save_messaging_results(session_id, error_result)
+        logging.error(f"Error processing playbook for session {session_id}: {str(e)}")
+        # Mark final assembly as failed if we get here
+        if agent_system and hasattr(agent_system, 'db_manager') and agent_system.db_manager:
+            await agent_system._track_stage_progress("final_assembly", "failed", None, str(e))
+        
+        # Update session status to failed
+        await db_manager.supabase.table("user_sessions").update({
+            "status": "failed",
+            "completed_at": datetime.now().isoformat()
+        }).eq("id", session_id).execute()
 
 @app.get("/api/v1/playbook-status/{session_id}")
 async def get_playbook_status(session_id: str, user: UserSession = Depends(get_current_user)):
-    """Check playbook generation status"""
-    # Implement status checking logic
-    return {"status": "completed", "ready": True}
+    """Get real-time status and progress for a playbook generation"""
+    try:
+        # Get session status
+        session_result = db_manager.supabase.table("user_sessions")\
+            .select("*")\
+            .eq("id", session_id)\
+            .eq("user_id", user.user_id)\
+            .execute()
+        
+        if not session_result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        session = session_result.data[0]
+        
+        # Get stage progress
+        progress = await db_manager.get_generation_progress(session_id)
+        
+        # Calculate overall progress
+        total_stages = len(progress) if progress else 11
+        completed_stages = len([stage for stage in progress if stage["status"] == "completed"]) if progress else 0
+        
+        # Get current stage (first in_progress or failed stage)
+        current_stage = None
+        if progress:
+            for stage in progress:
+                if stage["status"] in ["in_progress", "failed"]:
+                    current_stage = stage
+                    break
+        
+        return {
+            "session_id": session_id,
+            "status": session["status"],
+            "created_at": session["created_at"],
+            "completed_at": session.get("completed_at"),
+            "progress": {
+                "total_stages": total_stages,
+                "completed_stages": completed_stages,
+                "percentage": int((completed_stages / total_stages) * 100) if total_stages > 0 else 0,
+                "current_stage": current_stage,
+                "stages": progress
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error getting playbook status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get playbook status")
+
+@app.get("/api/v1/generation-progress/{session_id}")
+async def get_generation_progress(session_id: str, user: UserSession = Depends(get_current_user)):
+    """Get detailed generation progress for real-time updates"""
+    try:
+        # Verify session belongs to user
+        session_result = db_manager.supabase.table("user_sessions")\
+            .select("id, status")\
+            .eq("id", session_id)\
+            .eq("user_id", user.user_id)\
+            .execute()
+        
+        if not session_result.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get stage progress
+        progress = await db_manager.get_generation_progress(session_id)
+        
+        return {
+            "session_id": session_id,
+            "status": session_result.data[0]["status"],
+            "stages": progress
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error getting generation progress: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get generation progress")
 
 @app.get("/api/v1/playbook/{playbook_id}")
 async def get_playbook(playbook_id: str, user: UserSession = Depends(get_current_user)):
@@ -171,29 +267,52 @@ async def get_playbook(playbook_id: str, user: UserSession = Depends(get_current
 
 @app.get("/api/v1/download-playbook/{session_id}")
 async def download_playbook(session_id: str, user: UserSession = Depends(get_current_user)):
-    """Download generated playbook as PDF"""
+    """Download generated playbook as PDF with MessageCraft watermark"""
     try:
-        # Get results from database
-        playbooks = await db_manager.get_user_playbooks(user.user_id)
-        playbook = next((p for p in playbooks if p["id"] == session_id), None)
+        # Get playbook from database
+        playbook = await db_manager.get_playbook_by_id(session_id, user.user_id)
         
         if not playbook:
             raise HTTPException(status_code=404, detail="Playbook not found")
         
-        # Generate PDF
+        if not playbook.get("results"):
+            raise HTTPException(status_code=400, detail="Playbook not ready for download")
+        
+        # Extract company name from results or use default
+        company_name = "Your Company"
+        if playbook.get("results"):
+            results = playbook["results"]
+            if isinstance(results, dict):
+                # Try to get company name from various sources
+                if results.get("business_profile", {}).get("company_name"):
+                    company_name = results["business_profile"]["company_name"]
+                elif results.get("company_name"):
+                    company_name = results["company_name"]
+        
+        # Generate PDF with watermark
         pdf_content = playbook_generator.generate_messaging_playbook_pdf(
             playbook["results"], 
-            playbook.get("company_name", "Your Company")
+            company_name
         )
+        
+        # Create filename with company name
+        safe_company_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        filename = f"{safe_company_name.replace(' ', '_')}_Messaging_Playbook.pdf"
         
         return StreamingResponse(
             io.BytesIO(pdf_content),
             media_type="application/pdf",
-            headers={"Content-Disposition": "attachment; filename=messaging-playbook.pdf"}
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/pdf"
+            }
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error generating PDF for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
 
 @app.post("/api/v1/create-checkout")
 async def create_checkout(request: CheckoutRequest):
@@ -223,6 +342,22 @@ async def get_user_playbooks(user: UserSession = Depends(get_current_user)):
     
     return {"playbooks": playbooks}
 
+@app.get("/api/v1/playbooks")
+async def get_playbooks(user: UserSession = Depends(get_current_user)):
+    """Get all playbooks for the current user"""
+    playbooks = await db_manager.get_user_playbooks(user.user_id)
+    
+    # Ensure all results are properly parsed
+    for playbook in playbooks:
+        if playbook.get("results") and isinstance(playbook["results"], str):
+            try:
+                playbook["results"] = json.loads(playbook["results"])
+            except json.JSONDecodeError:
+                logging.warning(f"Failed to parse results for playbook {playbook.get('id')}")
+                playbook["results"] = {"error": "Invalid results format"}
+    
+    return {"playbooks": playbooks, "total": len(playbooks)}
+
 @app.delete("/api/v1/playbook/{playbook_id}")
 async def delete_playbook(playbook_id: str, user: UserSession = Depends(get_current_user)):
     """Delete a specific playbook"""
@@ -239,8 +374,11 @@ async def delete_playbook(playbook_id: str, user: UserSession = Depends(get_curr
         
         return {"message": "Playbook deleted successfully", "id": playbook_id}
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error deleting playbook {playbook_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete playbook: {str(e)}")
 
 @app.get("/")
 @app.head("/")

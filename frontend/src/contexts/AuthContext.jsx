@@ -88,6 +88,18 @@ export const AuthProvider = ({ children }) => {
     setUser(userData);
   };
 
+  const refreshAuth = async () => {
+    try {
+      const response = await api.get('/api/v1/auth/me');
+      setUser(response.data.user);
+      setIsAuthenticated(true);
+      return true;
+    } catch (error) {
+      logout();
+      return false;
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -97,6 +109,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     updateUser,
     checkAuth,
+    refreshAuth,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
