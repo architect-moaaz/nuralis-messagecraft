@@ -83,7 +83,7 @@ const Landing = () => {
   ];
 
   const stats = [
-    { number: "2-3", label: "Minutes to generate", suffix: "min" },
+    { number: "2-3", label: "Minutes to generate", suffix: "" },
     { number: "11", label: "AI agents working", suffix: "" },
     { number: "31", label: "Strategic questions", suffix: "" },
     { number: "95%", label: "Quality score average", suffix: "" }
