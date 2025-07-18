@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import Banner1 from '../assets/Banner1.png';
 import { 
   SparklesIcon, 
   ChartBarIcon, 
@@ -213,7 +214,7 @@ const Landing = () => {
                 {/* Main Visual - MessageCraft Interface */}
                 <div className="relative bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100">
                   <img 
-                    src="/images/Banner1.png" 
+                    src={Banner1} 
                     alt="MessageCraft interface showing business profile generation for Premier Fitness & Wellness Center"
                     className="w-full h-auto"
                   />
@@ -278,8 +279,13 @@ const Landing = () => {
       </section>
 
       {/* Process Section */}
-      <section className="py-20 bg-gradient-to-b from-soft-white to-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-20 bg-gradient-to-b from-soft-white to-white relative overflow-hidden">
+        {/* Background Elements */}
+        <div className="absolute inset-0 bg-gradient-to-r from-primary-50/30 to-accent-50/30" />
+        <div className="absolute top-10 left-10 w-32 h-32 bg-gradient-to-br from-primary-200/20 to-accent-200/20 rounded-full blur-xl" />
+        <div className="absolute bottom-10 right-10 w-40 h-40 bg-gradient-to-br from-accent-200/20 to-primary-200/20 rounded-full blur-xl" />
+        
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -295,42 +301,51 @@ const Landing = () => {
             </p>
           </motion.div>
 
-          <div className="mt-16 grid lg:grid-cols-3 gap-12">
-            {process.map((item, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.2 }}
-                viewport={{ once: true }}
-                className="relative text-center group"
-              >
-                {/* Connection Line */}
-                {index < process.length - 1 && (
-                  <div className="hidden lg:block absolute top-16 left-full w-full h-0.5 bg-gradient-to-r from-clarity-blue to-accent-mint z-0">
-                    <div className="absolute -right-2 -top-2 w-4 h-4 gradient-accent rounded-full shadow-lg" />
-                  </div>
-                )}
+          <div className="mt-16 relative">
+            {/* Connection Line - Desktop */}
+            <div className="hidden lg:block absolute top-20 left-1/2 transform -translate-x-1/2 w-full max-w-4xl">
+              <div className="relative h-0.5 bg-gradient-to-r from-clarity-blue via-accent-mint to-clarity-blue">
+                <div className="absolute left-1/3 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-accent-mint rounded-full shadow-lg" />
+                <div className="absolute left-2/3 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-accent-mint rounded-full shadow-lg" />
+              </div>
+            </div>
 
-                {/* Step Icon */}
-                <div className="relative mb-6">
-                  <div className="w-20 h-20 mx-auto gradient-bg rounded-2xl flex items-center justify-center shadow-xl group-hover:shadow-2xl transition-shadow duration-300">
-                    <item.icon className="w-10 h-10 text-white" />
-                  </div>
-                  <div className="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg border-2 border-clarity-blue">
-                    <span className="text-sm font-bold text-clarity-blue">{item.step}</span>
-                  </div>
-                </div>
+            <div className="grid lg:grid-cols-3 gap-12">
+              {process.map((item, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: index * 0.2 }}
+                  viewport={{ once: true }}
+                  className="relative text-center group"
+                >
+                  {/* Card Background */}
+                  <div className="relative bg-white rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 group-hover:-translate-y-2 border border-gray-100">
+                    {/* Step Icon */}
+                    <div className="relative mb-6">
+                      <div className="w-24 h-24 mx-auto gradient-bg rounded-3xl flex items-center justify-center shadow-xl group-hover:shadow-2xl transition-shadow duration-300 group-hover:scale-110">
+                        <item.icon className="w-12 h-12 text-white" />
+                      </div>
+                      <div className="absolute -top-3 -right-3 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg border-3 border-clarity-blue">
+                        <span className="text-lg font-bold text-clarity-blue">{item.step}</span>
+                      </div>
+                    </div>
 
-                {/* Content */}
-                <h3 className="text-2xl font-bold text-midnight-navy mb-4 group-hover:text-clarity-blue transition-colors">
-                  {item.title}
-                </h3>
-                <p className="text-slate-gray leading-relaxed text-lg">
-                  {item.description}
-                </p>
-              </motion.div>
-            ))}
+                    {/* Content */}
+                    <h3 className="text-2xl font-bold text-midnight-navy mb-4 group-hover:text-clarity-blue transition-colors">
+                      {item.title}
+                    </h3>
+                    <p className="text-slate-gray leading-relaxed text-lg">
+                      {item.description}
+                    </p>
+
+                    {/* Decorative Element */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-clarity-blue to-accent-mint rounded-t-3xl" />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
