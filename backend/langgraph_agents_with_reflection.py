@@ -8,7 +8,7 @@ from datetime import datetime
 import logging
 from dotenv import load_dotenv
 
-from langchain_anthropic import ChatAnthropic
+# from langchain_anthropic import ChatAnthropic  # Commented out to avoid socket_options issue
 from langchain.schema import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -19,18 +19,14 @@ load_dotenv()
 # Configuration
 logging.basicConfig(level=logging.INFO)
 
-# Initialize Claude LLM
-llm = ChatAnthropic(
-    model="claude-3-5-sonnet-20241022",
-    temperature=0.6,
-    api_key=os.getenv("ANTHROPIC_API_KEY"),
-    max_tokens=4000
-)
+# LLM will be initialized in the class to avoid socket_options issues
 
 # Enhanced State definition for the graph with reflection capabilities
 class MessagingState(TypedDict):
     messages: Annotated[List, add_messages]
     business_input: str
+    company_name: str
+    industry: str
     questionnaire_data: Optional[Dict]  # New: questionnaire responses
     business_profile: Optional[Dict]
     competitor_analysis: Optional[Dict]
@@ -66,7 +62,38 @@ class BusinessProfile:
 
 class MessageCraftAgentsWithReflection:
     def __init__(self, quality_threshold: float = 8.0, max_reflection_cycles: int = 3, db_manager=None):
-        self.llm = llm
+        # Initialize a direct Anthropic client with custom HTTP transport to fix socket_options issue
+        import anthropic
+        import httpx
+        
+        # Create a custom HTTP client without socket_options
+        try:
+            # Create clean transport without problematic options
+            transport = httpx.AsyncHTTPTransport()
+            http_client = httpx.AsyncClient(transport=transport)
+            
+            self.direct_anthropic_client = anthropic.AsyncAnthropic(
+                api_key=os.getenv("ANTHROPIC_API_KEY"),
+                http_client=http_client
+            )
+            logging.info("✅ Direct Anthropic client with custom transport initialized")
+            
+        except Exception as e:
+            logging.error(f"Failed to create custom transport client: {e}")
+            # Last resort - try basic client without any custom options
+            try:
+                self.direct_anthropic_client = anthropic.AsyncAnthropic(
+                    api_key=os.getenv("ANTHROPIC_API_KEY")
+                )
+                logging.info("✅ Basic Anthropic client initialized")
+            except Exception as e2:
+                logging.error(f"All Anthropic client initialization failed: {e2}")
+                raise Exception(f"Cannot create any Anthropic client: {e2}")
+        
+        # Skip LangChain wrapper entirely to avoid socket_options issue
+        self.llm = None  # We'll use direct_anthropic_client only
+        
+        logging.info("✅ Direct Anthropic client initialized successfully")
         self.quality_threshold = quality_threshold
         self.max_reflection_cycles = max_reflection_cycles
         self.db_manager = db_manager
@@ -94,6 +121,50 @@ class MessageCraftAgentsWithReflection:
                 )
             except Exception as e:
                 logging.error(f"Failed to track stage progress: {e}")
+    
+    async def _call_llm_direct(self, messages):
+        """Use direct Anthropic client to bypass socket_options issues"""
+        try:
+            # Convert LangChain messages to Anthropic format
+            anthropic_messages = []
+            system_message = None
+            
+            for msg in messages:
+                if hasattr(msg, 'type'):
+                    if msg.type == 'system':
+                        system_message = msg.content
+                    elif msg.type == 'human':
+                        anthropic_messages.append({"role": "user", "content": msg.content})
+                    elif msg.type == 'ai':
+                        anthropic_messages.append({"role": "assistant", "content": msg.content})
+                elif hasattr(msg, '__class__'):
+                    class_name = msg.__class__.__name__
+                    if 'System' in class_name:
+                        system_message = msg.content
+                    elif 'Human' in class_name:
+                        anthropic_messages.append({"role": "user", "content": msg.content})
+                    elif 'AI' in class_name:
+                        anthropic_messages.append({"role": "assistant", "content": msg.content})
+            
+            # Make direct call to Anthropic
+            response = await self.direct_anthropic_client.messages.create(
+                model="claude-3-5-sonnet-20241022",
+                max_tokens=4000,
+                temperature=0.6,
+                system=system_message if system_message else "You are a helpful AI assistant.",
+                messages=anthropic_messages
+            )
+            
+            # Create a simple response object similar to LangChain
+            class SimpleResponse:
+                def __init__(self, content):
+                    self.content = content
+            
+            return SimpleResponse(response.content[0].text)
+            
+        except Exception as e:
+            logging.error(f"Direct Anthropic call failed: {e}")
+            raise e
     
     def _load_competitor_intelligence(self) -> Dict:
         """Premium competitor intelligence database for 95% quality messaging"""
@@ -600,7 +671,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             business_profile = self.parse_json_response(response.content)
             
             state["business_profile"] = business_profile
@@ -670,7 +741,7 @@ class MessageCraftAgentsWithReflection:
             """
             
             try:
-                fallback_response = await self.llm.ainvoke([
+                fallback_response = await self._call_llm_direct([
                     SystemMessage(content="You are an adaptive business intelligence specialist. Use AI reasoning to extract maximum insight."),
                     HumanMessage(content=fallback_prompt)
                 ])
@@ -772,7 +843,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             competitor_analysis = self.parse_json_response(response.content)
             
             state["competitor_analysis"] = competitor_analysis
@@ -827,7 +898,7 @@ class MessageCraftAgentsWithReflection:
                     HumanMessage(content=competitor_fallback_prompt)
                 ]
                 
-                fallback_response = await self.llm.ainvoke(fallback_messages)
+                fallback_response = await self._call_llm_direct(fallback_messages)
                 competitor_analysis = self.parse_json_response(fallback_response.content)
                 
                 if competitor_analysis and not competitor_analysis.get('error'):
@@ -909,7 +980,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             positioning_strategy = self.parse_json_response(response.content)
             
             state["positioning_strategy"] = positioning_strategy
@@ -956,7 +1027,7 @@ class MessageCraftAgentsWithReflection:
                     HumanMessage(content=positioning_fallback_prompt)
                 ]
                 
-                fallback_response = await self.llm.ainvoke(fallback_messages)
+                fallback_response = await self._call_llm_direct(fallback_messages)
                 positioning_strategy = self.parse_json_response(fallback_response.content)
                 
                 if positioning_strategy and not positioning_strategy.get('error'):
@@ -1096,7 +1167,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             trust_analysis = self.parse_json_response(response.content)
             
             state["trust_building_analysis"] = trust_analysis
@@ -1167,7 +1238,7 @@ class MessageCraftAgentsWithReflection:
             """
             
             try:
-                trust_fallback_response = await self.llm.ainvoke([
+                trust_fallback_response = await self._call_llm_direct([
                     SystemMessage(content="You are an adaptive trust intelligence specialist. Use AI reasoning for industry-appropriate analysis."),
                     HumanMessage(content=trust_fallback_prompt)
                 ])
@@ -1344,7 +1415,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             emotional_analysis = self.parse_json_response(response.content)
             
             state["emotional_intelligence_analysis"] = emotional_analysis
@@ -1419,7 +1490,7 @@ class MessageCraftAgentsWithReflection:
                     HumanMessage(content=emotional_fallback_prompt)
                 ]
                 
-                fallback_response = await self.llm.ainvoke(fallback_messages)
+                fallback_response = await self._call_llm_direct(fallback_messages)
                 emotional_analysis = self.parse_json_response(fallback_response.content)
                 
                 if emotional_analysis and not emotional_analysis.get('error'):
@@ -1586,7 +1657,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             social_proof_analysis = self.parse_json_response(response.content)
             
             # Check if parsing was successful
@@ -1674,7 +1745,7 @@ class MessageCraftAgentsWithReflection:
                     HumanMessage(content=social_proof_fallback_prompt)
                 ]
                 
-                fallback_response = await self.llm.ainvoke(fallback_messages)
+                fallback_response = await self._call_llm_direct(fallback_messages)
                 social_proof_analysis = self.parse_json_response(fallback_response.content)
                 
                 if social_proof_analysis and not social_proof_analysis.get('error'):
@@ -1794,7 +1865,7 @@ class MessageCraftAgentsWithReflection:
             Focus on benefits, not features. Make it specific and memorable.
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert copywriter. Create compelling, specific value propositions."),
                 HumanMessage(content=value_prop_prompt)
             ])
@@ -1824,7 +1895,7 @@ class MessageCraftAgentsWithReflection:
             Keep it conversational and under 100 words.
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at creating compelling elevator pitches for businesses."),
                 HumanMessage(content=elevator_prompt)
             ])
@@ -1850,7 +1921,7 @@ class MessageCraftAgentsWithReflection:
             Format: Return only the taglines, one per line, no numbering or extra text.
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at creating memorable brand taglines."),
                 HumanMessage(content=tagline_prompt)
             ])
@@ -1883,7 +1954,7 @@ class MessageCraftAgentsWithReflection:
             Format: Return 3 differentiators, one per line, each starting with what makes you different.
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at identifying competitive differentiators."),
                 HumanMessage(content=diff_prompt)
             ])
@@ -2112,7 +2183,7 @@ class MessageCraftAgentsWithReflection:
             Format: Return only the headlines, one per line, no numbering.
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at creating compelling website headlines."),
                 HumanMessage(content=headlines_prompt)
             ])
@@ -2146,7 +2217,7 @@ class MessageCraftAgentsWithReflection:
             Keep each post under 150 words. Format: Return each post separated by "---"
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at creating engaging LinkedIn content for businesses."),
                 HumanMessage(content=linkedin_prompt)
             ])
@@ -2184,7 +2255,7 @@ class MessageCraftAgentsWithReflection:
             Body: [email body 2]
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at creating effective business email templates."),
                 HumanMessage(content=email_prompt)
             ])
@@ -2243,7 +2314,7 @@ class MessageCraftAgentsWithReflection:
             Format: Return only the one-liners, one per line.
             """
             
-            response = await self.llm.ainvoke([
+            response = await self._call_llm_direct([
                 SystemMessage(content="You are an expert at creating powerful sales one-liners."),
                 HumanMessage(content=sales_prompt)
             ])
@@ -2382,7 +2453,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             quality_review = self.parse_json_response(response.content)
             
             # Check if parsing was successful
@@ -2619,7 +2690,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             critique_analysis = self.parse_json_response(response.content)
             
             state["critique_points"].append(critique_analysis)
@@ -2753,7 +2824,7 @@ class MessageCraftAgentsWithReflection:
         ]
         
         try:
-            response = await self.llm.ainvoke(messages)
+            response = await self._call_llm_direct(messages)
             meta_review = self.parse_json_response(response.content)
             
             state["meta_review"] = meta_review
@@ -2868,7 +2939,7 @@ class MessageCraftAgentsWithReflection:
             logging.warning(f"⚠️ Using fallback final assembly due to error")
             return state
     
-    async def generate_messaging_playbook(self, business_input: str, questionnaire_data: Optional[Dict] = None, session_id: Optional[str] = None) -> Dict:
+    async def generate_messaging_playbook(self, business_input: str, company_name: str = "Your Company", industry: str = "General", questionnaire_data: Optional[Dict] = None, session_id: Optional[str] = None) -> Dict:
         """Main workflow orchestration using enhanced LangGraph with reflection"""
         try:
             logging.info("🚀 Starting enhanced LangGraph messaging playbook generation with reflection...")
@@ -2880,6 +2951,8 @@ class MessageCraftAgentsWithReflection:
             initial_state = {
                 "messages": [],
                 "business_input": business_input,
+                "company_name": company_name,
+                "industry": industry,
                 "questionnaire_data": questionnaire_data,
                 "business_profile": None,
                 "competitor_analysis": None,

@@ -13,6 +13,7 @@ import Playbook from './pages/EnhancedPlaybook';
 import AuthCallback from './pages/AuthCallback';
 import AuthError from './pages/AuthError';
 import PrivateRoute from './components/PrivateRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,7 +49,9 @@ function App() {
                 path="/playbook/:id"
                 element={
                   <PrivateRoute>
-                    <Playbook />
+                    <ErrorBoundary>
+                      <Playbook />
+                    </ErrorBoundary>
                   </PrivateRoute>
                 }
               />

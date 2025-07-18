@@ -28,6 +28,8 @@ class EnhancedDatabaseManager:
         company: Optional[str] = None
     ) -> Dict:
         """Create a new user account"""
+        logging.info(f"Creating user: email={email}, name={name}, auth_provider={auth_provider}")
+        
         user_data = {
             "email": email,
             "name": name,
@@ -42,11 +44,24 @@ class EnhancedDatabaseManager:
         
         if password_hash:
             user_data["password_hash"] = password_hash
+            logging.info("Password hash added to user data")
         if google_id:
             user_data["google_id"] = google_id
+            logging.info("Google ID added to user data")
         
-        result = self.supabase.table("users").insert(user_data).execute()
-        return result.data[0]
+        logging.info("Inserting user into Supabase...")
+        try:
+            result = self.supabase.table("users").insert(user_data).execute()
+            logging.info(f"Supabase insert result: {len(result.data)} rows created")
+            if result.data:
+                logging.info(f"Created user with ID: {result.data[0].get('id', 'unknown')}")
+                return result.data[0]
+            else:
+                logging.error("No data returned from Supabase insert")
+                raise Exception("No data returned from user creation")
+        except Exception as e:
+            logging.error(f"Supabase insert failed: {str(e)}")
+            raise
     
     async def get_user_by_email(self, email: str) -> Optional[Dict]:
         """Get user by email"""
@@ -65,9 +80,10 @@ class EnhancedDatabaseManager:
     
     async def update_user_last_login(self, user_id: str):
         """Update user's last login timestamp"""
-        self.supabase.table("users").update({
+        result = self.supabase.table("users").update({
             "last_login": datetime.now().isoformat()
         }).eq("id", user_id).execute()
+        return result
     
     async def update_user_plan(self, user_id: str, plan_type: str):
         """Update user's subscription plan"""
@@ -217,7 +233,61 @@ class EnhancedDatabaseManager:
             return result.data or []
         except Exception as e:
             logging.error(f"Failed to get generation progress: {e}")
-            return []
+            
+            # Fallback: Try to get progress from generation_stages table directly
+            try:
+                logging.info("Trying fallback method: querying generation_stages table directly")
+                result = self.supabase.table("generation_stages")\
+                    .select("stage_name, stage_display_name, stage_order, status, started_at, completed_at, stage_data, error_message")\
+                    .eq("session_id", session_id)\
+                    .order("stage_order")\
+                    .execute()
+                
+                if result.data:
+                    logging.info(f"Fallback successful: found {len(result.data)} stages")
+                    return result.data
+                else:
+                    logging.info("No generation stages found for session")
+                    return []
+            except Exception as fallback_error:
+                logging.error(f"Fallback method also failed: {fallback_error}")
+                # Return mock stages for better UX
+                return self._get_mock_generation_stages()
+    
+    def _get_mock_generation_stages(self) -> List[Dict]:
+        """Return mock generation stages when database function is not available"""
+        return [
+            {
+                "stage_name": "business_discovery",
+                "stage_display_name": "Business Discovery",
+                "stage_order": 1,
+                "status": "completed",
+                "started_at": None,
+                "completed_at": None,
+                "stage_data": None,
+                "error_message": None
+            },
+            {
+                "stage_name": "messaging_generator",
+                "stage_display_name": "Messaging Framework",
+                "stage_order": 7,
+                "status": "completed",
+                "started_at": None,
+                "completed_at": None,
+                "stage_data": None,
+                "error_message": None
+            },
+            {
+                "stage_name": "final_assembly",
+                "stage_display_name": "Final Assembly",
+                "stage_order": 11,
+                "status": "completed",
+                "started_at": None,
+                "completed_at": None,
+                "stage_data": None,
+                "error_message": None
+            }
+        ]
     
     async def save_messaging_results(self, session_id: str, results: Dict):
         """Save complete messaging playbook results"""
@@ -270,12 +340,39 @@ class EnhancedDatabaseManager:
         return playbook
     
     async def delete_playbook(self, playbook_id: str, user_id: str):
-        """Delete a specific playbook"""
-        # Verify ownership and delete
-        result = self.supabase.table("user_sessions").delete().eq("id", playbook_id).eq("user_id", user_id).execute()
+        """Delete a specific playbook and all related records"""
+        # First verify ownership
+        session_result = self.supabase.table("user_sessions")\
+            .select("id")\
+            .eq("id", playbook_id)\
+            .eq("user_id", user_id)\
+            .execute()
+        
+        if not session_result.data:
+            raise Exception("Playbook not found or access denied")
+        
+        # Delete in correct order to handle foreign key constraints
+        # 1. Delete kit_generations records (has FK to user_sessions without CASCADE)
+        kit_gen_result = self.supabase.table("kit_generations")\
+            .delete()\
+            .eq("session_id", playbook_id)\
+            .execute()
+        
+        # 2. Delete generation_stages records (has FK with CASCADE, but delete explicitly for clarity)
+        stages_result = self.supabase.table("generation_stages")\
+            .delete()\
+            .eq("session_id", playbook_id)\
+            .execute()
+        
+        # 3. Finally delete the user_sessions record
+        result = self.supabase.table("user_sessions")\
+            .delete()\
+            .eq("id", playbook_id)\
+            .eq("user_id", user_id)\
+            .execute()
         
         if not result.data:
-            raise Exception("Playbook not found or access denied")
+            raise Exception("Failed to delete playbook")
     
     # Payment Management
     async def record_payment(

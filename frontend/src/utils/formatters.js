@@ -61,11 +61,20 @@ export const calculateProgress = (currentStep, totalSteps) => {
 
 export const formatScore = (score, decimals = 2) => {
   if (score === null || score === undefined || score === '') return 'N/A';
+  
+  // Handle objects by returning 'N/A' instead of the object itself
+  if (typeof score === 'object') return 'N/A';
+  
   const numScore = parseFloat(score);
-  return isNaN(numScore) ? score : numScore.toFixed(decimals);
+  return isNaN(numScore) ? 'N/A' : numScore.toFixed(decimals);
 };
 
 export const getScoreColor = (score) => {
+  // Handle objects and other non-numeric values
+  if (typeof score === 'object' || score === null || score === undefined) {
+    return 'text-gray-600 bg-gray-100';
+  }
+  
   const numScore = parseFloat(score);
   if (isNaN(numScore)) return 'text-gray-600 bg-gray-100';
   if (numScore >= 8) return 'text-green-600 bg-green-100';

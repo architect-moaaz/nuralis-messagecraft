@@ -27,27 +27,53 @@ import toast from 'react-hot-toast';
 
 // Helper function to safely render values that might be objects
 const renderValue = (value) => {
-  if (!value) return 'Not specified';
-  
-  if (typeof value === 'object') {
-    // Handle common object structures from questionnaire
-    if (value.primary) return value.primary;
-    if (value.primary_segments) return value.primary_segments;
-    if (value.characteristics) return value.characteristics;
-    if (Array.isArray(value)) return value.join(', ');
+  try {
+    if (!value) return 'Not specified';
     
-    // Fallback for other objects
-    return Object.values(value).filter(v => v && typeof v === 'string').join(', ') || 'Not specified';
+    if (typeof value === 'object') {
+      // Handle arrays
+      if (Array.isArray(value)) {
+        return value.map(item => renderValue(item)).join(', ');
+      }
+      
+      // Handle common object structures from questionnaire
+      if (value.primary) return String(value.primary);
+      if (value.primary_segments) return String(value.primary_segments);
+      if (value.characteristics) return String(value.characteristics);
+      
+      // Handle specific target audience structure
+      if (value.age_range || value.demographics || value.income_level || value.lifestyle) {
+        const parts = [];
+        if (value.age_range) parts.push(`Age: ${value.age_range}`);
+        if (value.demographics) parts.push(`Demographics: ${value.demographics}`);
+        if (value.income_level) parts.push(`Income: ${value.income_level}`);
+        if (value.lifestyle) parts.push(`Lifestyle: ${value.lifestyle}`);
+        return parts.join(', ');
+      }
+      
+      // Fallback for other objects - safely extract string values
+      const stringValues = Object.values(value)
+        .filter(v => v !== null && v !== undefined)
+        .map(v => typeof v === 'string' ? v : String(v))
+        .filter(v => v.length > 0);
+      
+      return stringValues.length > 0 ? stringValues.join(', ') : 'Not specified';
+    }
+    
+    return String(value);
+  } catch (error) {
+    console.warn('Error in renderValue:', error, 'Value:', value);
+    return 'Display error';
   }
-  
-  return value;
 };
 
 const CopyableContent = ({ content, label, itemId }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+    // Ensure content is a string
+    const textContent = renderValue(content);
+    navigator.clipboard.writeText(textContent);
     setCopied(true);
     toast.success(`${label} copied to clipboard`);
     
@@ -59,7 +85,7 @@ const CopyableContent = ({ content, label, itemId }) => {
   return (
     <div className="bg-soft-white rounded-lg p-4 relative group">
       <p className="text-midnight-navy pr-10 whitespace-pre-line">
-        {content}
+        {renderValue(content)}
       </p>
       <button
         onClick={handleCopy}
@@ -279,7 +305,7 @@ const EnhancedPlaybook = () => {
                         {businessProfile.pain_points.map((point, index) => (
                           <li key={index} className="text-midnight-navy text-sm flex items-start">
                             <span className="w-2 h-2 bg-red-400 rounded-full mt-2 mr-2 flex-shrink-0" />
-                            {point}
+                            {renderValue(point)}
                           </li>
                         ))}
                       </ul>
@@ -293,7 +319,7 @@ const EnhancedPlaybook = () => {
                         {businessProfile.unique_features.map((feature, index) => (
                           <li key={index} className="text-midnight-navy text-sm flex items-start">
                             <span className="w-2 h-2 bg-green-400 rounded-full mt-2 mr-2 flex-shrink-0" />
-                            {feature}
+                            {renderValue(feature)}
                           </li>
                         ))}
                       </ul>
@@ -324,7 +350,7 @@ const EnhancedPlaybook = () => {
                       {positioningStrategy.target_segments.map((segment, index) => (
                         <li key={index} className="flex items-start">
                           <UsersIcon className="w-5 h-5 text-clarity-blue-600 mr-2 mt-0.5 flex-shrink-0" />
-                          <span className="text-slate-gray">{segment}</span>
+                          <span className="text-slate-gray">{renderValue(segment)}</span>
                         </li>
                       ))}
                     </ul>
@@ -338,7 +364,7 @@ const EnhancedPlaybook = () => {
                       {positioningStrategy.differentiation_strategy.map((strategy, index) => (
                         <li key={index} className="flex items-start">
                           <BoltIcon className="w-5 h-5 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
-                          <span className="text-slate-gray">{strategy}</span>
+                          <span className="text-slate-gray">{renderValue(strategy)}</span>
                         </li>
                       ))}
                     </ul>
@@ -384,7 +410,7 @@ const EnhancedPlaybook = () => {
                       key={index}
                       className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:shadow-sm transition-shadow"
                     >
-                      <span className="text-midnight-navy font-medium text-lg">{tagline}</span>
+                      <span className="text-midnight-navy font-medium text-lg">{renderValue(tagline)}</span>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(tagline);
@@ -412,7 +438,7 @@ const EnhancedPlaybook = () => {
                           {index + 1}
                         </span>
                       </div>
-                      <p className="text-midnight-navy flex-1">{diff}</p>
+                      <p className="text-midnight-navy flex-1">{renderValue(diff)}</p>
                     </div>
                   ))}
                 </div>
@@ -428,11 +454,11 @@ const EnhancedPlaybook = () => {
                     <div key={index} className="bg-soft-white p-4 rounded-lg">
                       <div className="flex items-start mb-2">
                         <ExclamationCircleIcon className="w-5 h-5 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <p className="font-medium text-midnight-navy">{item.objection}</p>
+                        <p className="font-medium text-midnight-navy">{renderValue(item.objection)}</p>
                       </div>
                       <div className="flex items-start ml-7">
                         <ChatBubbleLeftRightIcon className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <p className="text-slate-gray">{item.response}</p>
+                        <p className="text-slate-gray">{renderValue(item.response)}</p>
                       </div>
                     </div>
                   ))}
@@ -488,15 +514,15 @@ const EnhancedPlaybook = () => {
                         <>
                           <div className="mb-2">
                             <span className="text-sm font-medium text-blue-800">Subject:</span>
-                            <p className="text-blue-900 font-medium">{email.subject}</p>
+                            <p className="text-blue-900 font-medium">{renderValue(email.subject)}</p>
                           </div>
                           <div>
                             <span className="text-sm font-medium text-blue-800">Opening:</span>
-                            <p className="text-blue-900">{email.opening}</p>
+                            <p className="text-blue-900">{renderValue(email.opening)}</p>
                           </div>
                         </>
                       ) : (
-                        <p className="text-blue-900">{email}</p>
+                        <p className="text-blue-900">{renderValue(email)}</p>
                       )}
                     </div>
                   ))}
@@ -532,7 +558,7 @@ const EnhancedPlaybook = () => {
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                     <span className="text-sm font-medium text-blue-800">Reflection Cycles</span>
                     <span className="px-2 py-1 rounded-full text-sm font-medium bg-blue-200 text-blue-900">
-                      {results.reflection_metadata.total_reflection_cycles}
+                      {renderValue(results.reflection_metadata.total_reflection_cycles)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
@@ -557,7 +583,7 @@ const EnhancedPlaybook = () => {
                     {results.reflection_metadata.refinement_areas_addressed.map((area, index) => (
                       <li key={index} className="flex items-start">
                         <BoltIcon className="w-4 h-4 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
-                        <span className="text-sm text-slate-gray">{area}</span>
+                        <span className="text-sm text-slate-gray">{renderValue(area)}</span>
                       </li>
                     ))}
                   </ul>
@@ -625,7 +651,7 @@ const EnhancedPlaybook = () => {
                       {qualityReview.strengths.map((strength, index) => (
                         <li key={index} className="flex items-start">
                           <CheckIcon className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                          <span className="text-slate-gray">{strength}</span>
+                          <span className="text-slate-gray">{renderValue(strength)}</span>
                         </li>
                       ))}
                     </ul>
@@ -639,7 +665,7 @@ const EnhancedPlaybook = () => {
                       {qualityReview.improvements.map((improvement, index) => (
                         <li key={index} className="flex items-start">
                           <LightBulbIcon className="w-5 h-5 text-yellow-500 mr-2 mt-0.5 flex-shrink-0" />
-                          <span className="text-slate-gray">{improvement}</span>
+                          <span className="text-slate-gray">{renderValue(improvement)}</span>
                         </li>
                       ))}
                     </ul>
@@ -653,7 +679,7 @@ const EnhancedPlaybook = () => {
                 <div className="flex items-center">
                   <CheckIcon className="w-5 h-5 text-green-500 mr-2" />
                   <span className="font-medium text-green-800">
-                    Status: {qualityReview.approval_status}
+                    Status: {renderValue(qualityReview.approval_status)}
                   </span>
                 </div>
               </div>

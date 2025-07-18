@@ -34,6 +34,9 @@ class AuthManager:
     
     def create_access_token(self, user_id: str, email: str, plan_type: str = "basic") -> str:
         """Create JWT access token"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         payload = {
             "sub": user_id,
             "email": email,
@@ -41,16 +44,27 @@ class AuthManager:
             "exp": datetime.utcnow() + timedelta(hours=settings.JWT_EXPIRATION_HOURS),
             "iat": datetime.utcnow()
         }
-        return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        
+        logger.info(f"Creating JWT token for user {user_id} with expiration {settings.JWT_EXPIRATION_HOURS} hours")
+        token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        logger.info(f"JWT token created successfully, length: {len(token)}")
+        return token
     
     def verify_token(self, token: str) -> Dict[str, Any]:
         """Verify JWT token and return payload"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Verifying JWT token, length: {len(token)}")
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+            logger.info(f"JWT token verified successfully for user: {payload.get('sub', 'unknown')}")
             return payload
         except jwt.ExpiredSignatureError:
+            logger.error("JWT token has expired")
             raise HTTPException(status_code=401, detail="Token has expired")
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+            logger.error(f"Invalid JWT token: {str(e)}")
             raise HTTPException(status_code=401, detail="Invalid token")
     
     def hash_password(self, password: str) -> str:
@@ -58,8 +72,43 @@ class AuthManager:
         return pwd_context.hash(password)
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify password against hash"""
-        return pwd_context.verify(plain_password, hashed_password)
+        """Verify password against hash (supports both bcrypt and legacy SHA256)"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Verifying password. Hash starts with: {hashed_password[:10]}...")
+        logger.info(f"Hash length: {len(hashed_password)}")
+        
+        # Try bcrypt first (preferred method)
+        try:
+            bcrypt_result = pwd_context.verify(plain_password, hashed_password)
+            logger.info(f"Bcrypt verification result: {bcrypt_result}")
+            if bcrypt_result:
+                return True
+        except Exception as e:
+            logger.info(f"Bcrypt verification failed with exception: {e}")
+            # If bcrypt fails, try legacy SHA256 hash
+            pass
+        
+        # Fallback: Check if it's a legacy SHA256 hash
+        import hashlib
+        sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+        logger.info(f"Generated SHA256 hash: {sha256_hash[:10]}...")
+        logger.info(f"Stored hash:        {hashed_password[:10]}...")
+        
+        sha256_match = sha256_hash == hashed_password
+        logger.info(f"SHA256 verification result: {sha256_match}")
+        
+        if sha256_match:
+            return True
+        
+        logger.info("Both bcrypt and SHA256 verification failed")
+        return False
+    
+    def is_legacy_hash(self, hashed_password: str) -> bool:
+        """Check if password hash is legacy SHA256 format"""
+        # SHA256 hashes are 64 characters long and contain only hex characters
+        return len(hashed_password) == 64 and all(c in '0123456789abcdef' for c in hashed_password.lower())
     
     def get_google_auth_url(self, state: Optional[str] = None) -> str:
         """Generate Google OAuth authorization URL"""
@@ -114,15 +163,23 @@ auth_manager = AuthManager()
 # Dependency to get current user from JWT token
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
     """Get current user from JWT token"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     token = credentials.credentials
+    logger.info(f"get_current_user called with token length: {len(token)}")
+    
     try:
         payload = auth_manager.verify_token(token)
-        return {
+        user_data = {
             "user_id": payload["sub"],
             "email": payload["email"],
             "plan_type": payload.get("plan_type", "basic")
         }
+        logger.info(f"Successfully authenticated user: {user_data['email']}")
+        return user_data
     except Exception as e:
+        logger.error(f"Authentication failed in get_current_user: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 # Optional dependency - returns None if no auth

@@ -90,36 +90,78 @@ class PlaybookGenerator:
     
     def _safe_text_extract(self, value):
         """Safely extract text from various data structures"""
-        if not value:
-            return 'Not specified'
-        
-        if isinstance(value, str):
-            return value
-        
-        if isinstance(value, dict):
-            # Handle common dictionary structures
-            if 'primary' in value:
-                return value['primary']
-            elif 'primary_tone' in value:
-                return value['primary_tone']
-            elif 'description' in value:
-                return value['description']
-            elif 'content' in value:
-                return value['content']
-            else:
-                # Join all string values in the dict
-                text_values = []
-                for k, v in value.items():
-                    if isinstance(v, str):
-                        text_values.append(v)
-                    elif isinstance(v, list):
-                        text_values.extend([str(item) for item in v if item])
-                return ' | '.join(text_values) if text_values else 'Not specified'
-        
-        if isinstance(value, list):
-            return ' | '.join([str(item) for item in value if item])
-        
-        return str(value)
+        try:
+            if not value:
+                return 'Not specified'
+            
+            if isinstance(value, str):
+                return value
+            
+            if isinstance(value, dict):
+                # Handle specific target audience structure
+                if 'age_range' in value or 'demographics' in value or 'income_level' in value or 'lifestyle' in value:
+                    parts = []
+                    if value.get('age_range'):
+                        parts.append(f"Age: {value['age_range']}")
+                    if value.get('demographics'):
+                        parts.append(f"Demographics: {value['demographics']}")
+                    if value.get('income_level'):
+                        parts.append(f"Income: {value['income_level']}")
+                    if value.get('lifestyle'):
+                        parts.append(f"Lifestyle: {value['lifestyle']}")
+                    return ', '.join(parts) if parts else 'Not specified'
+                
+                # Handle common dictionary structures
+                if 'primary' in value:
+                    return str(value['primary'])
+                elif 'primary_tone' in value:
+                    return str(value['primary_tone'])
+                elif 'description' in value:
+                    return str(value['description'])
+                elif 'content' in value:
+                    return str(value['content'])
+                elif 'primary_segments' in value:
+                    return str(value['primary_segments'])
+                elif 'characteristics' in value:
+                    return str(value['characteristics'])
+                else:
+                    # Join all string values in the dict
+                    text_values = []
+                    for k, v in value.items():
+                        if isinstance(v, str) and v.strip():
+                            text_values.append(f"{k}: {v}")
+                        elif isinstance(v, list):
+                            list_text = ', '.join([str(item) for item in v if item])
+                            if list_text:
+                                text_values.append(f"{k}: {list_text}")
+                        elif v and not isinstance(v, dict):
+                            text_values.append(f"{k}: {str(v)}")
+                    return ' | '.join(text_values) if text_values else 'Not specified'
+            
+            if isinstance(value, list):
+                processed_items = []
+                for item in value:
+                    if isinstance(item, dict):
+                        processed_items.append(self._safe_text_extract(item))
+                    elif item:
+                        processed_items.append(str(item))
+                return ' | '.join(processed_items) if processed_items else 'Not specified'
+            
+            return str(value)
+            
+        except Exception as e:
+            print(f"Error in _safe_text_extract: {e}, Value: {value}")
+            return 'Error extracting text'
+    
+    def _safe_paragraph(self, text, style):
+        """Create a paragraph with safe text handling"""
+        try:
+            # Ensure text is a string
+            safe_text = self._safe_text_extract(text)
+            return Paragraph(safe_text, style)
+        except Exception as e:
+            print(f"Error creating paragraph: {e}, Text: {text}")
+            return Paragraph('Error displaying content', style)
     
     def custom_styles(self):
         """Define custom styles for the playbook"""
@@ -272,12 +314,12 @@ class PlaybookGenerator:
         
         if profile.get('company_overview'):
             story.append(Paragraph("Company Overview", self.styles['SubsectionHeader']))
-            story.append(Paragraph(self._safe_text_extract(profile['company_overview']), self.styles['Normal']))
+            story.append(self._safe_paragraph(profile['company_overview'], self.styles['Normal']))
             story.append(Spacer(1, 0.2*inch))
         
         if profile.get('target_audience'):
             story.append(Paragraph("Target Audience", self.styles['SubsectionHeader']))
-            story.append(Paragraph(self._safe_text_extract(profile['target_audience']), self.styles['Normal']))
+            story.append(self._safe_paragraph(profile['target_audience'], self.styles['Normal']))
             story.append(Spacer(1, 0.2*inch))
         
         if profile.get('unique_value_proposition'):
@@ -294,15 +336,13 @@ class PlaybookGenerator:
         # Add pain points if available
         if profile.get('pain_points'):
             story.append(Paragraph("Pain Points", self.styles['SubsectionHeader']))
-            pain_points_text = self._safe_text_extract(profile['pain_points'])
-            story.append(Paragraph(pain_points_text, self.styles['Normal']))
+            story.append(self._safe_paragraph(profile['pain_points'], self.styles['Normal']))
             story.append(Spacer(1, 0.2*inch))
         
         # Add unique features if available
         if profile.get('unique_features'):
             story.append(Paragraph("Unique Features", self.styles['SubsectionHeader']))
-            features_text = self._safe_text_extract(profile['unique_features'])
-            story.append(Paragraph(features_text, self.styles['Normal']))
+            story.append(self._safe_paragraph(profile['unique_features'], self.styles['Normal']))
             story.append(Spacer(1, 0.2*inch))
     
     def _add_messaging_framework_section(self, story, framework):

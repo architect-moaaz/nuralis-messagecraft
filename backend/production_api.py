@@ -125,15 +125,23 @@ async def debug_cors():
 async def register(request: RegisterRequest):
     """User registration with email/password"""
     try:
+        logger.info(f"Registration attempt for email: {request.email}")
+        logger.info(f"Request data: name={request.name}, company={request.company}")
+        
         # Check if user already exists
         existing_user = await db_manager.get_user_by_email(request.email)
         if existing_user:
+            logger.warning(f"Registration failed: User already exists for email {request.email}")
             raise HTTPException(status_code=400, detail="User with this email already exists")
+        
+        logger.info("User does not exist, proceeding with registration")
         
         # Hash password
         password_hash = auth_manager.hash_password(request.password)
+        logger.info(f"Password hashed successfully, hash length: {len(password_hash)}")
         
         # Create user
+        logger.info("Creating user in database...")
         user = await db_manager.create_user(
             email=request.email,
             name=request.name,
@@ -141,6 +149,7 @@ async def register(request: RegisterRequest):
             company=request.company,
             auth_provider="local"
         )
+        logger.info(f"User created successfully with ID: {user['id']}")
         
         # Create JWT token
         token = auth_manager.create_access_token(
@@ -150,7 +159,8 @@ async def register(request: RegisterRequest):
         )
         
         return {
-            "access_token": token,
+            "token": token,  # Frontend expects "token", not "access_token"
+            "access_token": token,  # Keep both for compatibility
             "token_type": "bearer",
             "user": {
                 "id": user["id"],
@@ -174,11 +184,32 @@ async def login(request: LoginRequest):
         # Get user
         user = await db_manager.get_user_by_email(request.email)
         if not user:
+            logger.error(f"User not found for email: {request.email}")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        logger.info(f"User found: {user['id']}, auth_provider: {user.get('auth_provider', 'unknown')}")
+        logger.info(f"Password hash length: {len(user['password_hash']) if user.get('password_hash') else 0}")
+        
+        # Check if user has a password (for OAuth users)
+        if not user.get("password_hash"):
+            logger.error(f"No password hash for user {user['id']} - might be OAuth user")
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
         # Verify password
-        if not auth_manager.verify_password(request.password, user["password_hash"]):
+        password_valid = auth_manager.verify_password(request.password, user["password_hash"])
+        logger.info(f"Password verification result: {password_valid}")
+        
+        if not password_valid:
+            logger.error(f"Password verification failed for user {user['id']}")
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Upgrade legacy SHA256 hash to bcrypt if needed
+        if auth_manager.is_legacy_hash(user["password_hash"]):
+            new_hash = auth_manager.hash_password(request.password)
+            db_manager.supabase.table("users").update({
+                "password_hash": new_hash
+            }).eq("id", user["id"]).execute()
+            logger.info(f"Upgraded legacy password hash for user {user['id']}")
         
         # Update last login
         await db_manager.update_user_last_login(user["id"])
@@ -194,7 +225,8 @@ async def login(request: LoginRequest):
         balance = await db_manager.get_user_credit_balance(user["id"])
         
         return {
-            "access_token": token,
+            "token": token,  # Frontend expects "token", not "access_token"
+            "access_token": token,  # Keep both for compatibility
             "token_type": "bearer",
             "user": {
                 "id": user["id"],
@@ -261,7 +293,7 @@ async def handle_google_callback(code: str):
             
             if user:
                 # Link Google account to existing user
-                await db_manager.supabase.table("users").update({
+                db_manager.supabase.table("users").update({
                     "google_id": user_info["id"],
                     "auth_provider": "google"
                 }).eq("id", user["id"]).execute()
@@ -300,9 +332,14 @@ async def handle_google_callback(code: str):
 @app.get("/api/v1/auth/me")
 async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
     """Get current user information"""
+    logger.info(f"/api/v1/auth/me called for user: {current_user['user_id']}")
+    
     user = await db_manager.get_user_by_id(current_user["user_id"])
     if not user:
+        logger.error(f"User not found in database: {current_user['user_id']}")
         raise HTTPException(status_code=404, detail="User not found")
+    
+    logger.info(f"User found in database: {user['email']}")
     
     balance = await db_manager.get_user_credit_balance(user["id"])
     
@@ -465,6 +502,84 @@ async def get_credit_history(current_user: Dict = Depends(get_current_user)):
     """Get user's credit transaction history"""
     transactions = await db_manager.get_credit_transactions(current_user["user_id"])
     return {"transactions": transactions}
+
+# Admin Credit Management Endpoints
+@app.post("/api/v1/admin/add-credits")
+async def admin_add_credits(
+    email: str,
+    credits: int,
+    description: str = "Admin credit addition",
+    current_user: Dict = Depends(get_current_user)
+):
+    """Add credits to a user account (admin only)"""
+    # Note: In production, add proper admin role checking
+    # For now, we'll allow any authenticated user for testing
+    
+    try:
+        # Find user by email
+        user = await db_manager.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        logger.info(f"Admin {current_user['email']} adding {credits} credits to user {email}")
+        
+        # Add credits
+        new_balance = await db_manager.add_user_credits(
+            user_id=user['id'],
+            credits=credits,
+            description=f"{description} (by {current_user['email']})"
+        )
+        
+        return {
+            "success": True,
+            "message": f"Added {credits} credits to {email}",
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "name": user['name']
+            },
+            "credits_added": credits,
+            "new_balance": new_balance
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding credits: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/admin/user-credits/{email}")
+async def admin_get_user_credits(
+    email: str,
+    current_user: Dict = Depends(get_current_user)
+):
+    """Get user credit information (admin only)"""
+    try:
+        # Find user by email
+        user = await db_manager.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get credit balance and transactions
+        balance = await db_manager.get_user_credit_balance(user['id'])
+        transactions = await db_manager.get_credit_transactions(user['id'], limit=10)
+        
+        return {
+            "user": {
+                "id": user['id'],
+                "email": user['email'],
+                "name": user['name'],
+                "plan_type": user['plan_type']
+            },
+            "balance": balance,
+            "recent_transactions": transactions
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting user credits: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/v1/playbooks")
 async def get_user_playbooks(current_user: Dict = Depends(get_current_user)):
@@ -748,7 +863,7 @@ async def process_messaging_playbook(
             await agents._track_stage_progress("final_assembly", "failed", None, str(e))
         
         # Update session status to failed
-        await db_manager.supabase.table("user_sessions").update({
+        db_manager.supabase.table("user_sessions").update({
             "status": "failed",
             "completed_at": datetime.now().isoformat()
         }).eq("id", session_id).execute()
