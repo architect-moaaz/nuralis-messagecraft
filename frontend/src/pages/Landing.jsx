@@ -281,9 +281,9 @@ const Landing = () => {
       {/* Process Section */}
       <section className="py-20 bg-gradient-to-b from-soft-white to-white relative overflow-hidden">
         {/* Background Elements */}
-        <div className="absolute inset-0 bg-gradient-to-r from-primary-50/30 to-accent-50/30" />
-        <div className="absolute top-10 left-10 w-32 h-32 bg-gradient-to-br from-primary-200/20 to-accent-200/20 rounded-full blur-xl" />
-        <div className="absolute bottom-10 right-10 w-40 h-40 bg-gradient-to-br from-accent-200/20 to-primary-200/20 rounded-full blur-xl" />
+        <div className="absolute inset-0 bg-gradient-to-r from-primary-50/30 to-primary-100/20" />
+        <div className="absolute top-10 left-10 w-32 h-32 bg-gradient-to-br from-primary-200/20 to-primary-300/20 rounded-full blur-xl" />
+        <div className="absolute bottom-10 right-10 w-40 h-40 bg-gradient-to-br from-primary-300/20 to-primary-200/20 rounded-full blur-xl" />
         
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -304,9 +304,9 @@ const Landing = () => {
           <div className="mt-16 relative">
             {/* Connection Line - Desktop */}
             <div className="hidden lg:block absolute top-20 left-1/2 transform -translate-x-1/2 w-full max-w-4xl">
-              <div className="relative h-0.5 bg-gradient-to-r from-clarity-blue via-accent-mint to-clarity-blue">
-                <div className="absolute left-1/3 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-accent-mint rounded-full shadow-lg" />
-                <div className="absolute left-2/3 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-accent-mint rounded-full shadow-lg" />
+              <div className="relative h-0.5 bg-gradient-to-r from-clarity-blue via-primary-600 to-clarity-blue">
+                <div className="absolute left-1/3 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-primary-600 rounded-full shadow-lg" />
+                <div className="absolute left-2/3 top-1/2 transform -translate-y-1/2 w-3 h-3 bg-primary-600 rounded-full shadow-lg" />
               </div>
             </div>
 
@@ -324,7 +324,7 @@ const Landing = () => {
                   <div className="relative bg-white rounded-3xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 group-hover:-translate-y-2 border border-gray-100">
                     {/* Step Icon */}
                     <div className="relative mb-6">
-                      <div className="w-24 h-24 mx-auto gradient-bg rounded-3xl flex items-center justify-center shadow-xl group-hover:shadow-2xl transition-shadow duration-300 group-hover:scale-110">
+                      <div className="w-24 h-24 mx-auto bg-gradient-to-br from-clarity-blue to-primary-800 rounded-3xl flex items-center justify-center shadow-xl group-hover:shadow-2xl transition-shadow duration-300 group-hover:scale-110">
                         <item.icon className="w-12 h-12 text-white" />
                       </div>
                       <div className="absolute -top-3 -right-3 w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-lg border-3 border-clarity-blue">
@@ -341,7 +341,7 @@ const Landing = () => {
                     </p>
 
                     {/* Decorative Element */}
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-clarity-blue to-accent-mint rounded-t-3xl" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-clarity-blue to-primary-600 rounded-t-3xl" />
                   </div>
                 </motion.div>
               ))}
@@ -462,7 +462,8 @@ const Landing = () => {
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.4 }}
               viewport={{ once: true }}
-              className="mt-12 gradient-bg rounded-2xl p-8 text-center"
+              className="mt-12 rounded-2xl p-8 text-center"
+              style={{ backgroundColor: '#1F3A8A' }}
             >
               <div className="flex items-center justify-center gap-4 mb-4">
                 <ShieldCheckIcon className="w-8 h-8 text-accent-mint" />
@@ -478,11 +479,11 @@ const Landing = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="relative py-20 gradient-bg overflow-hidden">
+      <section className="relative py-20 overflow-hidden" style={{ backgroundColor: '#1F3A8A' }}>
         {/* Background Elements */}
-        <div className="absolute inset-0 bg-gradient-to-br from-clarity-blue/20 to-accent-mint/20" />
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent-mint/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-clarity-blue/10 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-700/20 to-primary-500/20" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-primary-700/10 rounded-full blur-3xl" />
         
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div

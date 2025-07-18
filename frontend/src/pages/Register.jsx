@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { EyeIcon, EyeSlashIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import api from '../utils/api';
 
 const Register = () => {
@@ -79,7 +79,17 @@ const Register = () => {
         className="sm:mx-auto sm:w-full sm:max-w-md"
       >
         <Link to="/" className="flex justify-center">
-          <div className="w-12 h-12 bg-primary-600 rounded-lg" />
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            className="flex items-center"
+          >
+            <div className="w-12 h-12 bg-clarity-blue rounded-lg mr-3 flex items-center justify-center">
+              <SparklesIcon className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-2xl font-bold text-midnight-navy">
+              MessageCraft
+            </span>
+          </motion.div>
         </Link>
         <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
           Create your account

@@ -8,13 +8,13 @@ export default {
     extend: {
       colors: {
         // MessageCraft Brand Colors
-        'clarity-blue': '#1E3A8A',
-        'midnight-navy': '#0F172A',
+        'clarity-blue': '#1F3A8A', // Main brand color
+        'midnight-navy': '#10172A', // Dark navy for text
         'soft-white': '#F8FAFC',
         'accent-mint': '#22D3EE',
         'slate-gray': '#64748B',
         
-        // Primary color scheme based on Clarity Blue
+        // Primary color scheme based on Main Color #1F3A8A
         primary: {
           50: '#eff6ff',
           100: '#dbeafe',
@@ -22,11 +22,11 @@ export default {
           300: '#93c5fd',
           400: '#60a5fa',
           500: '#3b82f6',
-          600: '#1E3A8A', // Clarity Blue
+          600: '#1F3A8A', // Main brand color
           700: '#1d4ed8',
           800: '#1e40af',
           900: '#1e3a8a',
-          950: '#0F172A', // Midnight Navy
+          950: '#172554',
         },
         
         // Accent colors
@@ -54,8 +54,8 @@ export default {
           600: '#475569',
           700: '#334155',
           800: '#1e293b',
-          900: '#0F172A',  // Midnight Navy
-          950: '#020617',
+          900: '#10172A',  // Midnight Navy for text
+          950: '#0c1220',
         },
       },
       fontFamily: {

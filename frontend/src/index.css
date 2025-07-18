@@ -73,7 +73,7 @@
   }
   
   .gradient-bg {
-    @apply bg-gradient-to-br from-clarity-blue via-primary-700 to-midnight-navy;
+    @apply bg-gradient-to-br from-clarity-blue via-primary-800 to-primary-950;
   }
   
   .gradient-accent {
